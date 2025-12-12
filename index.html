@@ -720,55 +720,59 @@
   // STATE AGENCY RENDER
   // =========================
   function renderStateInfo(stateAbbrev) {
-    const stateNameEl = document.getElementById("state-name");
-    const stateRecordsEl = document.getElementById("state-records");
+  const stateNameEl = document.getElementById("state-name");
+  const stateRecordsEl = document.getElementById("state-records");
 
-    const fullName = STATE_NAME_MAP[stateAbbrev] || stateAbbrev || "Unknown";
-    stateNameEl.textContent = `${fullName} (${stateAbbrev})`;
-    stateRecordsEl.innerHTML = "";
+  const fullName = STATE_NAME_MAP[stateAbbrev] || stateAbbrev || "Unknown";
+  stateNameEl.textContent = `${fullName} (${stateAbbrev})`;
+  stateRecordsEl.innerHTML = "";
 
-    const rows = rowsByState.get(stateAbbrev) || [];
-    if (rows.length === 0) {
-      stateRecordsEl.innerHTML = "<p>No state agency data for this state yet.</p>";
-      return;
+  const rows = rowsByState.get(stateAbbrev) || [];
+  if (rows.length === 0) {
+    stateRecordsEl.innerHTML = "<p>No state agency data for this state yet.</p>";
+    return;
+  }
+
+  rows.forEach((row, idx) => {
+    const agency =
+      row["Law_Enforcement_Agency_Name"] ||
+      row["Agency"] ||
+      row["Agency_Name"] ||
+      row["Name"] ||
+      "Unknown agency";
+
+    const xVal  = hasValid(row["X_band"])  ? formatMulti(row["X_band"])  : "";
+    const kaVal = hasValid(row["Ka_band"]) ? formatMulti(row["Ka_band"]) : "";
+    const kVal  = hasValid(row["K_band"])  ? formatMulti(row["K_band"])  : "";
+    const lidar = hasValid(row["Lidar_Guns"]) ? formatMulti(row["Lidar_Guns"]) : "";
+    const tactics = hasValid(row["Special_Tactics"]) ? row["Special_Tactics"] : "";
+    const notes = hasValid(row["Notes"]) ? row["Notes"] : "";
+
+    // ✅ THIS WAS MISSING:
+    const flags = flagsHtmlFromRow(row);
+
+    let bandsHtml = "";
+    if (xVal || kaVal || kVal) {
+      bandsHtml += `<div><strong>Bands</strong></div>`;
+      if (xVal)  bandsHtml += `<div>- <strong>X:</strong><br>${xVal}</div>`;
+      if (kaVal) bandsHtml += `<div style="margin-top:4px;">- <strong>Ka:</strong><br>${kaVal}</div>`;
+      if (kVal)  bandsHtml += `<div style="margin-top:4px;">- <strong>K:</strong><br>${kVal}</div>`;
     }
 
-    rows.forEach((row, idx) => {
-      const agency =
-        row["Law_Enforcement_Agency_Name"] ||
-        row["Agency"] ||
-        row["Agency_Name"] ||
-        row["Name"] ||
-        "Unknown agency";
+    const div = document.createElement("div");
+    div.className = "record";
+    div.innerHTML = `
+      <div class="record-header">${idx + 1}. ${agency}</div>
+      ${bandsHtml}
+      ${lidar ? `<div style="margin-top:6px;"><strong>Lidar:</strong><br>${lidar}</div>` : ""}
+      ${flags ? `${flags}` : ""}
+      ${tactics ? `<div style="margin-top:6px;"><strong>Special tactics:</strong><br>${tactics}</div>` : ""}
+      ${notes ? `<div style="margin-top:6px;"><strong>Notes:</strong><br>${notes}</div>` : ""}
+    `;
+    stateRecordsEl.appendChild(div);
+  });
+}
 
-      // If the state CSV uses similar columns, show them nicely:
-      const xVal  = hasValid(row["X_band"])  ? formatMulti(row["X_band"])  : "";
-      const kaVal = hasValid(row["Ka_band"]) ? formatMulti(row["Ka_band"]) : "";
-      const kVal  = hasValid(row["K_band"])  ? formatMulti(row["K_band"])  : "";
-      const lidar = hasValid(row["Lidar_Guns"]) ? formatMulti(row["Lidar_Guns"]) : "";
-      const tactics = hasValid(row["Special_Tactics"]) ? row["Special_Tactics"] : "";
-      const notes = hasValid(row["Notes"]) ? row["Notes"] : "";
-
-      let bandsHtml = "";
-      if (xVal || kaVal || kVal) {
-        bandsHtml += `<div><strong>Bands</strong></div>`;
-        if (xVal)  bandsHtml += `<div>- <strong>X:</strong><br>${xVal}</div>`;
-        if (kaVal) bandsHtml += `<div style="margin-top:4px;">- <strong>Ka:</strong><br>${kaVal}</div>`;
-        if (kVal)  bandsHtml += `<div style="margin-top:4px;">- <strong>K:</strong><br>${kVal}</div>`;
-      }
-
-      const div = document.createElement("div");
-      div.className = "record";
-      div.innerHTML = `
-        <div class="record-header">${idx + 1}. ${agency}</div>
-        ${bandsHtml}
-        ${lidar ? `<div style="margin-top:6px;"><strong>Lidar:</strong><br>${lidar}</div>` : ""}
-        ${tactics ? `<div style="margin-top:6px;"><strong>Special tactics:</strong><br>${tactics}</div>` : ""}
-        ${notes ? `<div style="margin-top:6px;"><strong>Notes:</strong><br>${notes}</div>` : ""}
-      `;
-      stateRecordsEl.appendChild(div);
-    });
-  }
 
   function statePopupHtml(stateName, ab) {
     const rows = rowsByState.get(ab) || [];
