@@ -98,6 +98,9 @@
 
   const GEOJSON_URL = "./allCounties.json";
 
+  // ✅ Your states border file (GeoJSON)
+  const STATE_BORDERS_URL = "./StateBorders.json";
+
   const DEFAULT_CENTER = [39.5, -98.35];
   const DEFAULT_ZOOM = 4;
 
@@ -129,13 +132,10 @@
   }
 
   function containsDE(val) {
-  if (!hasValid(val)) return false;
-
-  // Match DE-prefixed codes like: DETC, DESL, DE...
-  // Works inside strings like "DragonEye Compact (DETC); PL4"
-  return /\bDE[A-Z0-9]*\b/i.test(String(val));
+    if (!hasValid(val)) return false;
+    // Matches DE-prefixed codes like: DETC, DESL, DE...
+    return /\bDE[A-Z0-9_-]*\b/i.test(String(val));
   }
-
 
   function formatMulti(value) {
     if (!value) return "";
@@ -433,6 +433,30 @@
   }
 
   // =========================
+  // LOAD STATE BORDERS (BOLD LINES)
+  // =========================
+  async function addStateBorders() {
+    const res = await fetch(STATE_BORDERS_URL);
+    if (!res.ok) throw new Error("StateBorders fetch failed: " + res.status);
+    const statesGeo = await res.json();
+
+    // pane above counties
+    map.createPane("statesPane");
+    map.getPane("statesPane").style.zIndex = 700;
+
+    L.geoJSON(statesGeo, {
+      pane: "statesPane",
+      interactive: false,   // don't block county clicks
+      style: {
+        color: "#000",
+        weight: 4,          // ✅ thicker state borders (adjust here)
+        opacity: 0.9,
+        fill: false
+      }
+    }).addTo(map);
+  }
+
+  // =========================
   // BOOTSTRAP
   // =========================
   async function bootstrap() {
@@ -452,8 +476,13 @@
         attribution: '&copy; OpenStreetMap contributors'
       }).addTo(map);
 
+      // counties pane
       map.createPane("countiesPane");
       map.getPane("countiesPane").style.zIndex = 650;
+
+      // ✅ add bold state borders from StateBorders.json
+      setStatus("Loading state borders…");
+      await addStateBorders();
 
       setTimeout(() => map.invalidateSize(), 0);
       window.addEventListener("resize", () => map.invalidateSize());
