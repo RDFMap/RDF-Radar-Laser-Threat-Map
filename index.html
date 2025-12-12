@@ -69,6 +69,7 @@
       <button class="filter-btn" data-filter="k">K</button>
       <button class="filter-btn" data-filter="ka">Ka</button>
       <button class="filter-btn" data-filter="lidar">Lidar</button>
+      <button class="filter-btn" data-filter="de">DE</button>
     </div>
 
     <h2>Selected County</h2>
@@ -111,6 +112,7 @@
   const hasK = new Set();
   const hasKa = new Set();
   const hasLidar = new Set();
+  const hasDE = new Set();
 
   // =========================
   // HELPERS
@@ -125,6 +127,15 @@
     if (!t) return false;
     return t.toLowerCase() !== "n/a";
   }
+
+  function containsDE(val) {
+  if (!hasValid(val)) return false;
+
+  // Match DE-prefixed codes like: DETC, DESL, DE...
+  // Works inside strings like "DragonEye Compact (DETC); PL4"
+  return /\bDE[A-Z0-9]*\b/i.test(String(val));
+  }
+
 
   function formatMulti(value) {
     if (!value) return "";
@@ -177,6 +188,7 @@
     hasK.clear();
     hasKa.clear();
     hasLidar.clear();
+    hasDE.clear();
 
     let validRowCount = 0;
 
@@ -199,7 +211,9 @@
 
       if (hasValid(row["K_band"])) hasK.add(geoid);
       if (hasValid(row["Ka_band"])) hasKa.add(geoid);
+
       if (hasValid(row["Lidar_Guns"])) hasLidar.add(geoid);
+      if (containsDE(row["Lidar_Guns"])) hasDE.add(geoid);
     }
 
     console.log("Loaded valid county rows:", validRowCount);
@@ -225,6 +239,7 @@
       if (activeFilter === "k") return hasValid(row["K_band"]);
       if (activeFilter === "ka") return hasValid(row["Ka_band"]);
       if (activeFilter === "lidar") return hasValid(row["Lidar_Guns"]);
+      if (activeFilter === "de") return containsDE(row["Lidar_Guns"]);
       return true;
     });
 
@@ -273,6 +288,7 @@
       if (activeFilter === "k") return hasValid(r["K_band"]);
       if (activeFilter === "ka") return hasValid(r["Ka_band"]);
       if (activeFilter === "lidar") return hasValid(r["Lidar_Guns"]);
+      if (activeFilter === "de") return containsDE(r["Lidar_Guns"]);
       return true;
     });
 
@@ -327,6 +343,8 @@
       s.fillColor = "orange"; s.fillOpacity = 0.5;
     } else if (activeFilter === "lidar" && hasLidar.has(geoid)) {
       s.fillColor = "red"; s.fillOpacity = 0.5;
+    } else if (activeFilter === "de" && hasDE.has(geoid)) {
+      s.fillColor = "purple"; s.fillOpacity = 0.5;
     }
 
     return s;
@@ -350,12 +368,8 @@
       extent: 4096,
       buffer: 256,
 
-      // FIX: SVG renderer so clicks work reliably on Leaflet 1.8+ / 1.9+
       rendererFactory: L.svg.tile,
-
-      // FIX: force it on a top pane
       pane: "countiesPane",
-
       interactive: true,
 
       getFeatureId: f => {
@@ -372,8 +386,6 @@
 
     vgLayer.on("click", (e) => {
       try {
-        console.log("VG CLICK FIRED", e);
-
         const props =
           (e && e.layer && e.layer.properties) ? e.layer.properties :
           (e && e.properties) ? e.properties :
@@ -440,12 +452,8 @@
         attribution: '&copy; OpenStreetMap contributors'
       }).addTo(map);
 
-      // Top pane for counties
       map.createPane("countiesPane");
       map.getPane("countiesPane").style.zIndex = 650;
-
-      // Debug: proves the map is receiving clicks at all
-      map.on("click", (e) => console.log("MAP CLICK", e.latlng));
 
       setTimeout(() => map.invalidateSize(), 0);
       window.addEventListener("resize", () => map.invalidateSize());
