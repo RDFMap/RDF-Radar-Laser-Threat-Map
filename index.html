@@ -52,6 +52,9 @@
       font-size: 14px;
     }
     .record-header { font-weight: 700; margin-bottom: 6px; }
+
+    .flagline { margin-top: 6px; }
+    .flagline div { margin-top: 3px; }
   </style>
 </head>
 
@@ -97,8 +100,6 @@
     "https://docs.google.com/spreadsheets/d/e/2PACX-1vR4ZdepcnMW0OCvCvgRTWPFGSuaQ6u75caFu8zF_Sh-VY525EwU81XzaiJhnvQTCcfHndclCHAQv9DT/pub?gid=2097640781&single=true&output=csv";
 
   const GEOJSON_URL = "./allCounties.json";
-
-  // ✅ Your states border file (GeoJSON)
   const STATE_BORDERS_URL = "./StateBorders.json";
 
   const DEFAULT_CENTER = [39.5, -98.35];
@@ -131,9 +132,28 @@
     return t.toLowerCase() !== "n/a";
   }
 
+  function isYes(v) {
+    if (v === undefined || v === null) return false;
+    return String(v).trim().toLowerCase() === "y";
+  }
+
+  function getField(row, ...keys) {
+    // grab a value from a row where headers might be slightly different / messy
+    for (const k of keys) {
+      if (!k) continue;
+      if (row[k] !== undefined) return row[k];
+      // try normalized compare
+      const target = String(k).trim().toLowerCase().replace(/\s+/g, " ");
+      for (const rk of Object.keys(row)) {
+        const norm = String(rk).trim().toLowerCase().replace(/\s+/g, " ");
+        if (norm === target) return row[rk];
+      }
+    }
+    return "";
+  }
+
   function containsDE(val) {
     if (!hasValid(val)) return false;
-    // Matches DE-prefixed codes like: DETC, DESL, DE...
     return /\bDE[A-Z0-9_-]*\b/i.test(String(val));
   }
 
@@ -169,6 +189,20 @@
     }
 
     return "";
+  }
+
+  function flagsHtmlFromRow(row) {
+    const overpass = isYes(getField(row, "Overpass_shots", "Overpass shots", "Overpass"));
+    const rear     = isYes(getField(row, "Rear_shots", "Rear shots", "Rear"));
+    const ghost    = isYes(getField(row, "Ghost or Unmarked Unit", "Ghost/Unmarked", "Ghost", "Unmarked Unit"));
+
+    const lines = [];
+    if (overpass) lines.push(`Overpass Shots: ✅`);
+    if (rear)     lines.push(`Rear Shots: ✅`);
+    if (ghost)    lines.push(`Ghost/Unmarked: ✅`);
+
+    if (lines.length === 0) return "";
+    return `<div class="flagline">${lines.map(l => `<div>${l}</div>`).join("")}</div>`;
   }
 
   // =========================
@@ -266,13 +300,16 @@
         if (kVal)  bandsHtml += `<div style="margin-top:4px;">- <strong>K:</strong><br>${kVal}</div>`;
       }
 
+      const flags = flagsHtmlFromRow(row);
+
       const div = document.createElement("div");
       div.className = "record";
       div.innerHTML = `
         <div class="record-header">${idx + 1}. ${agency}</div>
         ${bandsHtml}
         ${lidar ? `<div style="margin-top:6px;"><strong>Lidar:</strong><br>${lidar}</div>` : ""}
-        ${tactics ? `<div><strong>Special tactics:</strong><br>${tactics}</div>` : ""}
+        ${flags ? `${flags}` : ""}
+        ${tactics ? `<div style="margin-top:6px;"><strong>Special tactics:</strong><br>${tactics}</div>` : ""}
       `;
       recordsEl.appendChild(div);
     });
@@ -301,6 +338,7 @@
     const kVal  = hasValid(row["K_band"])  ? formatMulti(row["K_band"])  : "";
     const lidar = hasValid(row["Lidar_Guns"]) ? formatMulti(row["Lidar_Guns"]) : "";
     const tactics = hasValid(row["Special_Tactics"]) ? row["Special_Tactics"] : "";
+    const flags = flagsHtmlFromRow(row);
 
     let bandsHtml = "";
     if (kaVal || kVal) {
@@ -315,7 +353,8 @@
         <div><strong>Main agency:</strong> ${agency}</div>
         ${bandsHtml ? `<div style="margin-top:6px;">${bandsHtml}</div>` : ""}
         ${lidar ? `<div style="margin-top:6px;"><strong>Lidar:</strong><br>${lidar}</div>` : ""}
-        ${tactics ? `<div><strong>Special tactics:</strong><br>${tactics}</div>` : ""}
+        ${flags ? `${flags}` : ""}
+        ${tactics ? `<div style="margin-top:6px;"><strong>Special tactics:</strong><br>${tactics}</div>` : ""}
       </div>
     `;
   }
@@ -433,29 +472,28 @@
   }
 
   // =========================
-  // LOAD STATE BORDERS (BOLD LINES)
+  // STATE BORDERS (BOLD LINES)
   // =========================
   async function addStateBorders() {
-  const res = await fetch(STATE_BORDERS_URL);
-  if (!res.ok) throw new Error("StateBorders fetch failed: " + res.status);
-  const statesGeo = await res.json();
+    const res = await fetch(STATE_BORDERS_URL);
+    if (!res.ok) throw new Error("StateBorders fetch failed: " + res.status);
+    const statesGeo = await res.json();
 
-  map.createPane("statesPane");
-  map.getPane("statesPane").style.zIndex = 690;  // above countiesPane (650), below popupPane
-  map.getPane("popupPane").style.zIndex = 900;   // force popups above everything
+    map.createPane("statesPane");
+    map.getPane("statesPane").style.zIndex = 690;   // above counties, below popups
+    map.getPane("popupPane").style.zIndex = 900;    // popups always on top
 
-  L.geoJSON(statesGeo, {
-    pane: "statesPane",
-    interactive: false,
-    style: {
-      color: "#000",
-      weight: 4,
-      opacity: 0.9,
-      fill: false
-    }
-  }).addTo(map);
-}
-
+    L.geoJSON(statesGeo, {
+      pane: "statesPane",
+      interactive: false,
+      style: {
+        color: "#000",
+        weight: 4,
+        opacity: 0.9,
+        fill: false
+      }
+    }).addTo(map);
+  }
 
   // =========================
   // BOOTSTRAP
@@ -477,11 +515,9 @@
         attribution: '&copy; OpenStreetMap contributors'
       }).addTo(map);
 
-      // counties pane
       map.createPane("countiesPane");
       map.getPane("countiesPane").style.zIndex = 650;
 
-      // ✅ add bold state borders from StateBorders.json
       setStatus("Loading state borders…");
       await addStateBorders();
 
