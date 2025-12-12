@@ -310,6 +310,8 @@
     VA:"Virginia", WA:"Washington", WV:"West Virginia", WI:"Wisconsin", WY:"Wyoming", DC:"District of Columbia"
   };
 
+  const colorMap = { x:"gold", k:"orange", ka:"blue", lidar:"red", de:"purple" };
+
   // =========================
   // KA FREQ KEYWORDS
   // =========================
@@ -361,6 +363,16 @@
   // State agency data
   const rowsByState = new Map();
   let lastClickedStateAbbrev = null;
+
+  // --- NEW: State police/state patrol capability sets (from STATE AGENCY CSV)
+  const spHasX = new Set();
+  const spHasK = new Set();
+  const spHasKa = new Set();
+  const spHasLidar = new Set();
+  const spHasDE = new Set();
+  const spHasKa338 = new Set();
+  const spHasKa347 = new Set();
+  const spHasKa355 = new Set();
 
   // =========================
   // HELPERS
@@ -533,6 +545,28 @@
     return STATE_NAME_MAP[ab] || ab || "Unknown";
   }
 
+  // --- NEW: identify "state police / state patrol" rows from STATE_AGENCY_CSV
+  function isStatePoliceAgencyRow(row) {
+    const name =
+      (row["Law_Enforcement_Agency_Name"] ||
+       row["Agency"] ||
+       row["Agency_Name"] ||
+       row["Name"] ||
+       "").toString().toLowerCase();
+
+    // Covers: "Georgia State Patrol", "Ohio State Highway Patrol", "State Police", "Highway Patrol", etc.
+    return (
+      name.includes("state patrol") ||
+      name.includes("highway patrol") ||
+      name.includes("state police") ||
+      name.includes("state trooper") ||
+      name.includes("state troopers") ||
+      name.includes("dps") ||
+      name.includes("dept of public safety") ||
+      name.includes("department of public safety")
+    );
+  }
+
   // =========================
   // UI MODE
   // =========================
@@ -616,6 +650,8 @@
     const parsed = Papa.parse(text, { header: true, skipEmptyLines: true });
 
     rowsByState.clear();
+    spHasX.clear(); spHasK.clear(); spHasKa.clear(); spHasLidar.clear(); spHasDE.clear();
+    spHasKa338.clear(); spHasKa347.clear(); spHasKa355.clear();
 
     for (const raw of parsed.data) {
       if (!raw) continue;
@@ -638,6 +674,23 @@
 
       if (!rowsByState.has(ab)) rowsByState.set(ab, []);
       rowsByState.get(ab).push(row);
+
+      // --- NEW: build "state police guns" sets
+      if (isStatePoliceAgencyRow(row)) {
+        if (hasValid(row["X_band"])) spHasX.add(ab);
+        if (hasValid(row["K_band"])) spHasK.add(ab);
+
+        if (hasValid(row["Ka_band"])) {
+          spHasKa.add(ab);
+          const d = detectKaFreqsFromText(row["Ka_band"]);
+          if (d.f338) spHasKa338.add(ab);
+          if (d.f347) spHasKa347.add(ab);
+          if (d.f355) spHasKa355.add(ab);
+        }
+
+        if (hasValid(row["Lidar_Guns"])) spHasLidar.add(ab);
+        if (containsDE(row["Lidar_Guns"])) spHasDE.add(ab);
+      }
     }
   }
 
@@ -778,7 +831,7 @@
   }
 
   // =========================
-  // STYLES
+  // STYLES (COUNTIES)
   // =========================
   function styleForProps(props) {
     const geoid = normalizeGeoid(props.GEOID || props.geoid || props.GEOID10 || props.GEO_ID || "");
@@ -819,8 +872,6 @@
     }
     if (matches.length === 0) return s;
 
-    const colorMap = { x:"gold", k:"orange", ka:"blue", lidar:"red", de:"purple" };
-
     if (matches.length === 1) {
       s.fillColor = colorMap[matches[0]] || "green";
       s.fillOpacity = 0.50;
@@ -831,6 +882,72 @@
     s.fillOpacity = 0.55;
     s.weight = 2.0;
     return s;
+  }
+
+  // =========================
+  // NEW: STATE FILL STYLE WHEN FILTERING IN STATE MODE (STATE POLICE ONLY)
+  // =========================
+  function stateMatchesFilter(ab, f) {
+    if (f === "x") return spHasX.has(ab);
+    if (f === "k") return spHasK.has(ab);
+    if (f === "ka") return spHasKa.has(ab);
+    if (f === "lidar") return spHasLidar.has(ab);
+    if (f === "de") return spHasDE.has(ab);
+    return false;
+  }
+
+  function stateMatchesKaFreq(ab, choice) {
+    if (choice === "33.8") return spHasKa338.has(ab);
+    if (choice === "34.7") return spHasKa347.has(ab);
+    if (choice === "35.5") return spHasKa355.has(ab);
+    return (spHasKa338.has(ab) || spHasKa347.has(ab) || spHasKa355.has(ab));
+  }
+
+  function getStateFillColorForCurrentMode(ab) {
+    // Only fill states when:
+    //  - State mode ON
+    //  - AND we are NOT in allMode (or we are in kaFreqMode which already forces filtering)
+    if (!stateMode) return null;
+    if (!kaFreqMode && allMode) return null;
+
+    // Ka freq mode: fill blue if state police matches the chosen Ka freq
+    if (kaFreqMode) {
+      return stateMatchesKaFreq(ab, kaFreqChoice) ? "blue" : null;
+    }
+
+    // Normal filter mode: fill based on which filters match state police
+    if (selectedFilters.size === 0) return null;
+
+    const matches = [];
+    for (const f of FILTERS) {
+      if (!selectedFilters.has(f)) continue;
+      if (stateMatchesFilter(ab, f)) matches.push(f);
+    }
+
+    if (matches.length === 0) return null;
+    if (matches.length === 1) return colorMap[matches[0]] || null;
+    return "cyan";
+  }
+
+  function stateStyleForFeature(feature) {
+    const p = (feature && feature.properties) ? feature.properties : {};
+    const ab = getStateAbbrevFromProps(p);
+
+    const fillColor = ab ? getStateFillColorForCurrentMode(ab) : null;
+
+    return {
+      color: "#000",
+      weight: 4,
+      opacity: 0.9,
+      fill: true,
+      fillColor: fillColor || "transparent",
+      fillOpacity: fillColor ? 0.35 : 0.00
+    };
+  }
+
+  function refreshStateStyles() {
+    if (!statesLayer) return;
+    statesLayer.setStyle(stateStyleForFeature);
   }
 
   // =========================
@@ -909,13 +1026,7 @@
     statesLayer = L.geoJSON(statesGeo, {
       pane: "statesPane",
       interactive: true,
-      style: () => ({
-        color: "#000",
-        weight: 4,
-        opacity: 0.9,
-        fill: true,
-        fillOpacity: 0.00
-      }),
+      style: stateStyleForFeature, // <-- CHANGED (dynamic style)
       onEachFeature: (feature, layer) => {
         layer.on("click", (e) => {
           if (!stateMode) return;
@@ -939,6 +1050,7 @@
     }).addTo(map);
 
     setStateMode(stateMode);
+    refreshStateStyles(); // <-- ensure style applies immediately
   }
 
   function setStateMode(on) {
@@ -955,6 +1067,7 @@
     }
 
     setPanelsForMode();
+    refreshStateStyles(); // <-- CHANGED: repaint fills based on current filter state
 
     if (stateMode) {
       if (lastClickedStateAbbrev) renderStateInfo(lastClickedStateAbbrev);
@@ -1034,6 +1147,10 @@
 
         renderFilterButtons();
         await rebuildLayer();
+
+        // <-- NEW: repaint state fills whenever filters change
+        refreshStateStyles();
+
         if (lastClickedProps && !stateMode) renderCountyInfo(lastClickedProps);
       });
     });
@@ -1070,6 +1187,10 @@
         setKaDropdown(false);
         renderFilterButtons();
         await rebuildLayer();
+
+        // <-- NEW: repaint state fills whenever Ka freq mode changes
+        refreshStateStyles();
+
         if (lastClickedProps && !stateMode) renderCountyInfo(lastClickedProps);
       });
     });
@@ -1083,7 +1204,7 @@
     renderFilterButtons();
   }
 
-  // Ka dropdown open/close
+  // Ka dropdown open/close (kept because your file already had it duplicated)
   function setKaDropdown(open) {
     document.getElementById("kaDropdown").classList.toggle("open", !!open);
   }
@@ -1101,7 +1222,7 @@
 
       setStatus("Loading county shapes…");
       const geoRes = await fetch(GEOJSON_URL);
-      if (!geoRes.ok) throw new Error("GeoJSON fetch failed: " + res.status);
+      if (!geoRes.ok) throw new Error("GeoJSON fetch failed: " + geoRes.status);
       geojsonCache = await geoRes.json();
 
       map = L.map("map").setView(DEFAULT_CENTER, DEFAULT_ZOOM);
