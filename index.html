@@ -364,9 +364,16 @@
   }
 
   function containsDE(val) {
-    if (!hasValid(val)) return false;
-    return /\bDE[A-Z0-9_-]*\b/i.test(String(val));
-  }
+  if (!hasValid(val)) return false;
+  const s = String(val);
+
+  // DE / DESL / DETC / DE-xxx etc + DragonEye / Dragon Eye / dragoneye
+  return (
+    /\bDE[A-Z0-9_-]*\b/i.test(s) ||
+    /\bdragon\s*eye\b/i.test(s)   // matches "dragon eye" AND "dragoneye"
+  );
+}
+
 
   function matchAnyRegex(text, regexList) {
     if (!hasValid(text)) return false;
