@@ -17,142 +17,170 @@
     #app { display: flex; height: 100vh; width: 100vw; }
     #map { flex: 2; min-width: 0; }
 
+    /* Sidebar: cleaner */
     #sidebar {
       flex: 1;
-      max-width: 440px;
-      border-left: 1px solid #ddd;
-      padding: 12px 16px;
+      max-width: 460px;
+      border-left: 1px solid #e6e6e6;
+      padding: 14px 14px;
       box-sizing: border-box;
       overflow-y: auto;
+      background: #fafafa;
+    }
+
+    .panel {
       background: #fff;
+      border: 1px solid #eee;
+      border-radius: 12px;
+      padding: 12px 12px;
+      margin-bottom: 12px;
+      box-shadow: 0 1px 0 rgba(0,0,0,0.03);
+      overflow: visible; /* IMPORTANT: allow dropdown overlay */
     }
-    #sidebar h1 { font-size: 20px; margin: 0 0 8px; }
-    #sidebar h2 { font-size: 16px; margin-top: 16px; margin-bottom: 8px; }
-    #status { font-size: 13px; color: #666; margin-top: 4px; }
+
+    #sidebar h1 { font-size: 20px; margin: 0 0 6px; }
+    #status { font-size: 13px; color: #666; margin-top: 2px; }
     #county-name, #state-name { font-weight: 700; }
+    h2 { font-size: 15px; margin: 0 0 8px; }
 
-    .filters { margin: 10px 0; }
-    .filters-title { font-size:13px; font-weight:600; margin-bottom: 6px; }
+    .filters-title { font-size:13px; font-weight:700; margin-bottom: 10px; }
 
-    .filter-bar {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      align-items: center;
+    /* === Filters row: force one line, no scroll === */
+    .filter-row{
+      display:flex;
+      align-items:center;
+      gap:6px;
+      flex-wrap:nowrap;
+      overflow: visible;      /* allow dropdown to render outside row */
     }
 
-    .filter-btn {
+    /* smaller buttons so All/X/K/Ka/Lidar/DE fit */
+    .filter-btn{
       display: inline-flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      min-width: 60px;
-      padding: 6px 10px 5px;
-      font-size: 12px;
-      border-radius: 8px;
-      border: 1px solid #ccc;
-      background: #f7f7f7;
+      min-width: 52px;
+      height: 40px;
+      padding: 5px 8px 4px;
+      font-size: 11px;
+      border-radius: 10px;
+      border: 1px solid #d6d6d6;
+      background: #f6f6f6;
       cursor: pointer;
       user-select: none;
-      line-height: 1.1;
+      line-height: 1.05;
+      flex: 0 0 auto;
     }
 
+    .filter-btn .label { font-weight: 700; }
     .filter-btn .tick {
-      margin-top: 4px;
-      font-size: 14px;
-      line-height: 14px;
+      margin-top: 2px;
+      font-size: 12px;
+      line-height: 12px;
       visibility: hidden;
     }
 
-    .filter-btn.active {
-      background: #333;
-      color: #fff;
-      border-color: #333;
-    }
+    .filter-btn.active { background: #222; color: #fff; border-color: #222; }
     .filter-btn.active .tick { visibility: visible; }
 
     .filter-btn.disabled { opacity: 0.45; cursor: not-allowed; }
 
     /* Ka split button + dropdown arrow */
-    .ka-split {
-      position: relative;
-      display: inline-flex;
-      align-items: stretch;
-      gap: 0;
+    .ka-split{
+      position: relative;      /* anchor dropdown */
+      display:inline-flex;
+      align-items:stretch;
+      overflow: visible;       /* critical: don’t clip dropdown */
+      flex: 0 0 auto;
     }
 
-    .ka-split .filter-btn {
+    .ka-split .filter-btn{
       border-top-right-radius: 0;
       border-bottom-right-radius: 0;
     }
 
-    .ka-arrow {
+    /* smaller arrow */
+    .ka-arrow{
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 28px;
+      width: 30px;
+      height: 40px;
       padding: 0;
-      border: 1px solid #ccc;
+      border: 1px solid #d6d6d6;
       border-left: 0;
-      background: #f7f7f7;
-      border-top-right-radius: 8px;
-      border-bottom-right-radius: 8px;
+      background: #f6f6f6;
+      border-top-right-radius: 10px;
+      border-bottom-right-radius: 10px;
       cursor: pointer;
       font-size: 12px;
       line-height: 1;
       user-select: none;
+      flex: 0 0 auto;
     }
 
-    .ka-arrow.active {
-      background: #333;
-      color: #fff;
-      border-color: #333;
-    }
-
+    .ka-arrow.active { background: #222; color: #fff; border-color: #222; }
     .ka-arrow.disabled { opacity: 0.45; cursor: not-allowed; }
 
-    .ka-dropdown {
+    /* ONE custom dropdown (no <select>) */
+    .ka-dropdown{
       position: absolute;
-      top: calc(100% + 6px);
+      top: calc(100% + 8px);
       left: 0;
-      z-index: 9999;
+      z-index: 10050;           /* above panes */
       background: #fff;
-      border: 1px solid #ddd;
-      border-radius: 10px;
+      border: 1px solid #e6e6e6;
+      border-radius: 12px;
       padding: 8px;
-      box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+      box-shadow: 0 12px 28px rgba(0,0,0,0.14);
       display: none;
-      min-width: 220px;
+      min-width: 230px;
     }
+    .ka-dropdown.open{ display:block; }
 
-    .ka-dropdown.open { display: block; }
-
-    .ka-dropdown select {
+    .ka-item{
       width: 100%;
-      padding: 8px 10px;
-      border-radius: 8px;
-      border: 1px solid #ccc;
+      text-align: left;
+      padding: 10px 10px;
+      border-radius: 10px;
+      border: 1px solid transparent;
       background: #fff;
+      cursor: pointer;
       font-size: 12px;
+      line-height: 1.2;
+    }
+    .ka-item:hover { background: #f4f4f4; }
+    .ka-item.active { background: #222; color: #fff; }
+
+    /* state row centered below */
+    .state-row-centered{
+      margin-top: 10px;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      gap:6px;
+      text-align:center;
+    }
+    .state-row-centered .hint{
+      font-size:12px;
+      color:#666;
     }
 
+    /* Records */
     .record {
       border: 1px solid #eee;
-      border-radius: 8px;
+      border-radius: 12px;
       padding: 10px;
       margin-bottom: 10px;
       font-size: 14px;
+      background: #fff;
     }
-    .record-header { font-weight: 700; margin-bottom: 6px; }
+    .record-header { font-weight: 800; margin-bottom: 6px; }
 
     .flagline { margin-top: 6px; }
     .flagline div { margin-top: 3px; }
-
-    .hint {
-      font-size: 12px;
-      color: #666;
-      margin-top: 6px;
-    }
   </style>
 </head>
 
@@ -161,75 +189,83 @@
   <div id="map"></div>
 
   <div id="sidebar">
-    <h1>Enforcement Map</h1>
-    <div id="status">Loading…</div>
+    <div class="panel">
+      <h1>Enforcement Map</h1>
+      <div id="status">Loading…</div>
+    </div>
 
-    <div class="filters">
-      <div class="filters-title">Filters (multi-select):</div>
+    <div class="panel">
+      <div class="filters-title">Filters:</div>
 
-      <div class="filter-bar" id="filterBar">
-        <!-- State mode toggle -->
-        <button class="filter-btn" id="stateModeBtn" type="button">
-          <div>State</div><div class="tick">✅</div>
-        </button>
-
+      <!-- FILTER ROW (ONE LINE) -->
+      <div class="filter-row" id="filterBar">
         <button class="filter-btn active" data-filter="all" type="button">
-          <div>All</div><div class="tick">✅</div>
+          <div class="label">All</div><div class="tick">✅</div>
         </button>
 
         <button class="filter-btn active" data-filter="x" type="button">
-          <div>X</div><div class="tick">✅</div>
+          <div class="label">X</div><div class="tick">✅</div>
         </button>
 
         <button class="filter-btn active" data-filter="k" type="button">
-          <div>K</div><div class="tick">✅</div>
+          <div class="label">K</div><div class="tick">✅</div>
         </button>
 
-        <!-- Ka button with dropdown arrow -->
+        <!-- Ka with dropdown arrow -->
         <div class="ka-split" id="kaSplit">
-          <button class="filter-btn active" data-filter="ka" type="button">
-            <div>Ka</div><div class="tick">✅</div>
+          <button class="filter-btn active" data-filter="ka" type="button" id="kaMainBtn">
+            <div class="label" id="kaLabel">Ka</div><div class="tick">✅</div>
           </button>
+
           <button class="ka-arrow" id="kaArrowBtn" type="button" aria-label="Ka frequency options">▾</button>
 
           <div class="ka-dropdown" id="kaDropdown">
-            <select id="kaFreqSelect">
-              <option value="off">Ka (normal)</option>
-              <option value="any">Ka Freq: Any</option>
-              <option value="33.8">Ka Freq: 33.8</option>
-              <option value="34.7">Ka Freq: 34.7</option>
-              <option value="35.5">Ka Freq: 35.5</option>
-            </select>
+            <button class="ka-item" data-kafreq="off" type="button">Ka (normal)</button>
+            <button class="ka-item" data-kafreq="any" type="button">Ka Freq: Any</button>
+            <button class="ka-item" data-kafreq="33.8" type="button">Ka Freq: 33.8</button>
+            <button class="ka-item" data-kafreq="34.7" type="button">Ka Freq: 34.7</button>
+            <button class="ka-item" data-kafreq="35.5" type="button">Ka Freq: 35.5</button>
           </div>
         </div>
 
         <button class="filter-btn active" data-filter="lidar" type="button">
-          <div>Lidar</div><div class="tick">✅</div>
+          <div class="label">Lidar</div><div class="tick">✅</div>
         </button>
 
         <button class="filter-btn active" data-filter="de" type="button">
-          <div>DE</div><div class="tick">✅</div>
+          <div class="label">DE</div><div class="tick">✅</div>
         </button>
       </div>
 
-      <div class="hint" id="modeHint" style="display:none;">
-        State Mode is on. Click a state to view state agencies.
+      <!-- STATE ROW BELOW + CENTERED -->
+      <div class="state-row-centered">
+        <button class="filter-btn" id="stateModeBtn" type="button">
+          <div class="label">State</div><div class="tick">✅</div>
+        </button>
+
+        <div class="hint" id="modeHint" style="display:none;">
+          State Mode is on. Click a state to view state agencies.
+        </div>
       </div>
     </div>
 
     <!-- County UI -->
-    <div id="countyPanel">
+    <div class="panel" id="countyPanel">
       <h2>Selected County</h2>
       <div id="county-name">None selected</div>
+
+      <div style="height:10px;"></div>
 
       <h2>Agencies / Records</h2>
       <div id="records"></div>
     </div>
 
     <!-- State UI -->
-    <div id="statePanel" style="display:none;">
+    <div class="panel" id="statePanel" style="display:none;">
       <h2>Selected State</h2>
       <div id="state-name">None selected</div>
+
+      <div style="height:10px;"></div>
 
       <h2>State Agencies / Records</h2>
       <div id="state-records"></div>
@@ -264,9 +300,6 @@
 
   const FILTERS = ["x", "k", "ka", "lidar", "de"];
 
-  // =========================
-  // STATE NAME MAP (fallback)
-  // =========================
   const STATE_NAME_MAP = {
     AL:"Alabama", AK:"Alaska", AZ:"Arizona", AR:"Arkansas", CA:"California", CO:"Colorado", CT:"Connecticut", DE:"Delaware",
     FL:"Florida", GA:"Georgia", HI:"Hawaii", ID:"Idaho", IL:"Illinois", IN:"Indiana", IA:"Iowa", KS:"Kansas", KY:"Kentucky",
@@ -274,8 +307,7 @@
     MO:"Missouri", MT:"Montana", NE:"Nebraska", NV:"Nevada", NH:"New Hampshire", NJ:"New Jersey", NM:"New Mexico",
     NY:"New York", NC:"North Carolina", ND:"North Dakota", OH:"Ohio", OK:"Oklahoma", OR:"Oregon", PA:"Pennsylvania",
     RI:"Rhode Island", SC:"South Carolina", SD:"South Dakota", TN:"Tennessee", TX:"Texas", UT:"Utah", VT:"Vermont",
-    VA:"Virginia", WA:"Washington", WV:"West Virginia", WI:"Wisconsin", WY:"Wyoming",
-    DC:"District of Columbia"
+    VA:"Virginia", WA:"Washington", WV:"West Virginia", WI:"Wisconsin", WY:"Wyoming", DC:"District of Columbia"
   };
 
   // =========================
@@ -297,18 +329,18 @@
   // STATE
   // =========================
   let map, vgLayer, geojsonCache;
+  let statesLayer = null;
 
-  let statesLayer = null;          // clickable state polygons layer
-  let stateMode = false;           // <--- NEW
+  let stateMode = false;
 
   let selectedId = null;
   let lastClickedProps = null;
 
-  // Normal mode filters
+  // Normal filters
   let allMode = true;
   let selectedFilters = new Set(FILTERS);
 
-  // Ka Frequency Mode state
+  // Ka freq mode
   let kaFreqMode = false;
   let kaFreqChoice = "any";
   let savedAllMode = true;
@@ -327,7 +359,7 @@
   const hasAnyData = new Set();
 
   // State agency data
-  const rowsByState = new Map();   // "GA" -> [rows]
+  const rowsByState = new Map();
   let lastClickedStateAbbrev = null;
 
   // =========================
@@ -364,16 +396,13 @@
   }
 
   function containsDE(val) {
-  if (!hasValid(val)) return false;
-  const s = String(val);
-
-  // DE / DESL / DETC / DE-xxx etc + DragonEye / Dragon Eye / dragoneye
-  return (
-    /\bDE[A-Z0-9_-]*\b/i.test(s) ||
-    /\bdragon\s*eye\b/i.test(s)   // matches "dragon eye" AND "dragoneye"
-  );
-}
-
+    if (!hasValid(val)) return false;
+    const s = String(val);
+    return (
+      /\bDE[A-Z0-9_-]*\b/i.test(s) ||
+      /\bdragon\s*eye\b/i.test(s)
+    );
+  }
 
   function matchAnyRegex(text, regexList) {
     if (!hasValid(text)) return false;
@@ -483,7 +512,6 @@
     return (hasKa338.has(geoid) || hasKa347.has(geoid) || hasKa355.has(geoid));
   }
 
-  // Robust state abbrev getter from GeoJSON props or CSV row
   function normalizeStateAbbrev(v) {
     const t = String(v ?? "").trim().toUpperCase();
     if (/^[A-Z]{2}$/.test(t)) return t;
@@ -491,13 +519,7 @@
   }
 
   function getStateAbbrevFromProps(p) {
-    const candidates = [
-      p.STUSPS, p.stusps,
-      p.STATE, p.state,
-      p.POSTAL, p.postal,
-      p.ABBR, p.abbr,
-      p.USPS, p.usps
-    ];
+    const candidates = [p.STUSPS, p.stusps, p.STATE, p.state, p.ABBR, p.abbr, p.USPS, p.usps, p.POSTAL, p.postal];
     for (const c of candidates) {
       const ab = normalizeStateAbbrev(c);
       if (ab) return ab;
@@ -506,9 +528,33 @@
   }
 
   function getStateNameFromProps(p, ab) {
-    const name = p.NAME || p.name || p.State || p.STATE_NAME || p.state_name || "";
+    const name = p.NAME || p.name || p.STATE_NAME || p.state_name || "";
     if (hasValid(name)) return String(name).trim();
     return STATE_NAME_MAP[ab] || ab || "Unknown";
+  }
+
+  // =========================
+  // UI MODE
+  // =========================
+  function setPanelsForMode() {
+    document.getElementById("countyPanel").style.display = stateMode ? "none" : "block";
+    document.getElementById("statePanel").style.display  = stateMode ? "block" : "none";
+    document.getElementById("modeHint").style.display = stateMode ? "block" : "none";
+  }
+
+  // Ka dropdown open/close
+  function setKaDropdown(open) {
+    document.getElementById("kaDropdown").classList.toggle("open", !!open);
+  }
+  function isKaDropdownOpen() {
+    return document.getElementById("kaDropdown").classList.contains("open");
+  }
+
+  function updateKaLabel() {
+    const el = document.getElementById("kaLabel");
+    if (!el) return;
+    if (!kaFreqMode) el.textContent = "Ka";
+    else el.textContent = (kaFreqChoice === "any") ? "Ka ✓" : `Ka ${kaFreqChoice}`;
   }
 
   // =========================
@@ -526,15 +572,11 @@
     hasKa338.clear(); hasKa347.clear(); hasKa355.clear();
     hasAnyData.clear();
 
-    let validRowCount = 0;
-
     for (const raw of parsed.data) {
       if (!raw) continue;
 
       const geoid = normalizeGeoid(raw.GEOID);
       if (!geoid) continue;
-
-      validRowCount++;
 
       const row = {};
       for (const k of Object.keys(raw)) {
@@ -561,8 +603,6 @@
 
       if (rowHasAnyContent(row)) hasAnyData.add(geoid);
     }
-
-    console.log("Loaded county rows:", validRowCount);
   }
 
   // =========================
@@ -576,13 +616,11 @@
     const parsed = Papa.parse(text, { header: true, skipEmptyLines: true });
 
     rowsByState.clear();
-    let rowCount = 0;
 
     for (const raw of parsed.data) {
       if (!raw) continue;
 
-      // Expect a "State" or "ST" or "Abbrev" column; handle robustly
-      const stateAbbrev =
+      const ab =
         normalizeStateAbbrev(raw.State) ||
         normalizeStateAbbrev(raw.STATE) ||
         normalizeStateAbbrev(raw.ST) ||
@@ -590,7 +628,7 @@
         normalizeStateAbbrev(raw.Abbrev) ||
         normalizeStateAbbrev(raw.ABBR);
 
-      if (!stateAbbrev) continue;
+      if (!ab) continue;
 
       const row = {};
       for (const k of Object.keys(raw)) {
@@ -598,12 +636,9 @@
         row[k.trim()] = (raw[k] ?? "").toString().trim();
       }
 
-      if (!rowsByState.has(stateAbbrev)) rowsByState.set(stateAbbrev, []);
-      rowsByState.get(stateAbbrev).push(row);
-      rowCount++;
+      if (!rowsByState.has(ab)) rowsByState.set(ab, []);
+      rowsByState.get(ab).push(row);
     }
-
-    console.log("Loaded state agency rows:", rowCount);
   }
 
   // =========================
@@ -611,7 +646,6 @@
   // =========================
   function passesCurrentFilters(row) {
     if (kaFreqMode) return rowMatchesKaFreq(row, kaFreqChoice);
-
     if (allMode) return rowHasAnyContent(row);
     if (selectedFilters.size === 0) return false;
 
@@ -619,19 +653,6 @@
       if (rowMatchesFilter(row, f)) return true;
     }
     return false;
-  }
-
-  // =========================
-  // PANELS TOGGLE
-  // =========================
-  function setPanelsForMode() {
-    const countyPanel = document.getElementById("countyPanel");
-    const statePanel  = document.getElementById("statePanel");
-    const hint = document.getElementById("modeHint");
-
-    countyPanel.style.display = stateMode ? "none" : "block";
-    statePanel.style.display  = stateMode ? "block" : "none";
-    hint.style.display = stateMode ? "block" : "none";
   }
 
   // =========================
@@ -695,96 +716,65 @@
     const all = rowsByGeoid.get(geoid) || [];
     const row = all.find(passesCurrentFilters);
 
-    if (!row) {
-      return `<strong>${st ? `${name}, ${st}` : name}</strong><br>No data for the selected filters.`;
-    }
+    if (!row) return `<strong>${st ? `${name}, ${st}` : name}</strong><br>No data for the selected filters.`;
 
     const agency = row["Law_Enforcement_Agency_Name"] || "Unknown agency";
-    const kaVal = hasValid(row["Ka_band"]) ? formatMulti(row["Ka_band"]) : "";
-    const kVal  = hasValid(row["K_band"])  ? formatMulti(row["K_band"])  : "";
-    const xVal  = hasValid(row["X_band"])  ? formatMulti(row["X_band"])  : "";
-    const lidar = hasValid(row["Lidar_Guns"]) ? formatMulti(row["Lidar_Guns"]) : "";
-
-    let bandsHtml = "";
-    if (xVal || kaVal || kVal) {
-      bandsHtml += `<div><strong>Bands</strong></div>`;
-      if (xVal)  bandsHtml += `<div>- <strong>X:</strong><br>${xVal}</div>`;
-      if (kaVal) bandsHtml += `<div style="margin-top:4px;">- <strong>Ka:</strong><br>${kaVal}</div>`;
-      if (kVal)  bandsHtml += `<div style="margin-top:4px;">- <strong>K:</strong><br>${kVal}</div>`;
-    }
-
-    return `
-      <div>
-        <div style="font-weight:700; margin-bottom:4px;">${st ? `${name}, ${st}` : name}</div>
-        <div><strong>Main agency:</strong> ${agency}</div>
-        ${bandsHtml ? `<div style="margin-top:6px;">${bandsHtml}</div>` : ""}
-        ${lidar ? `<div style="margin-top:6px;"><strong>Lidar:</strong><br>${lidar}</div>` : ""}
-      </div>
-    `;
+    return `<strong>${st ? `${name}, ${st}` : name}</strong><br>Main agency: ${agency}`;
   }
 
   // =========================
-  // STATE AGENCY RENDER
+  // STATE RENDER
   // =========================
   function renderStateInfo(stateAbbrev) {
-  const stateNameEl = document.getElementById("state-name");
-  const stateRecordsEl = document.getElementById("state-records");
+    const stateNameEl = document.getElementById("state-name");
+    const stateRecordsEl = document.getElementById("state-records");
 
-  const fullName = STATE_NAME_MAP[stateAbbrev] || stateAbbrev || "Unknown";
-  stateNameEl.textContent = `${fullName} (${stateAbbrev})`;
-  stateRecordsEl.innerHTML = "";
+    const fullName = STATE_NAME_MAP[stateAbbrev] || stateAbbrev || "Unknown";
+    stateNameEl.textContent = `${fullName} (${stateAbbrev})`;
+    stateRecordsEl.innerHTML = "";
 
-  const rows = rowsByState.get(stateAbbrev) || [];
-  if (rows.length === 0) {
-    stateRecordsEl.innerHTML = "<p>No state agency data for this state yet.</p>";
-    return;
-  }
-
-  rows.forEach((row, idx) => {
-    const agency =
-      row["Law_Enforcement_Agency_Name"] ||
-      row["Agency"] ||
-      row["Agency_Name"] ||
-      row["Name"] ||
-      "Unknown agency";
-
-    const xVal  = hasValid(row["X_band"])  ? formatMulti(row["X_band"])  : "";
-    const kaVal = hasValid(row["Ka_band"]) ? formatMulti(row["Ka_band"]) : "";
-    const kVal  = hasValid(row["K_band"])  ? formatMulti(row["K_band"])  : "";
-    const lidar = hasValid(row["Lidar_Guns"]) ? formatMulti(row["Lidar_Guns"]) : "";
-    const tactics = hasValid(row["Special_Tactics"]) ? row["Special_Tactics"] : "";
-    const notes = hasValid(row["Notes"]) ? row["Notes"] : "";
-
-    // ✅ THIS WAS MISSING:
-    const flags = flagsHtmlFromRow(row);
-
-    let bandsHtml = "";
-    if (xVal || kaVal || kVal) {
-      bandsHtml += `<div><strong>Bands</strong></div>`;
-      if (xVal)  bandsHtml += `<div>- <strong>X:</strong><br>${xVal}</div>`;
-      if (kaVal) bandsHtml += `<div style="margin-top:4px;">- <strong>Ka:</strong><br>${kaVal}</div>`;
-      if (kVal)  bandsHtml += `<div style="margin-top:4px;">- <strong>K:</strong><br>${kVal}</div>`;
+    const rows = rowsByState.get(stateAbbrev) || [];
+    if (rows.length === 0) {
+      stateRecordsEl.innerHTML = "<p>No state agency data for this state yet.</p>";
+      return;
     }
 
-    const div = document.createElement("div");
-    div.className = "record";
-    div.innerHTML = `
-      <div class="record-header">${idx + 1}. ${agency}</div>
-      ${bandsHtml}
-      ${lidar ? `<div style="margin-top:6px;"><strong>Lidar:</strong><br>${lidar}</div>` : ""}
-      ${flags ? `${flags}` : ""}
-      ${tactics ? `<div style="margin-top:6px;"><strong>Special tactics:</strong><br>${tactics}</div>` : ""}
-      ${notes ? `<div style="margin-top:6px;"><strong>Notes:</strong><br>${notes}</div>` : ""}
-    `;
-    stateRecordsEl.appendChild(div);
-  });
-}
+    rows.forEach((row, idx) => {
+      const agency =
+        row["Law_Enforcement_Agency_Name"] ||
+        row["Agency"] ||
+        row["Agency_Name"] ||
+        row["Name"] ||
+        "Unknown agency";
 
+      const xVal  = hasValid(row["X_band"])  ? formatMulti(row["X_band"])  : "";
+      const kaVal = hasValid(row["Ka_band"]) ? formatMulti(row["Ka_band"]) : "";
+      const kVal  = hasValid(row["K_band"])  ? formatMulti(row["K_band"])  : "";
+      const lidar = hasValid(row["Lidar_Guns"]) ? formatMulti(row["Lidar_Guns"]) : "";
+      const tactics = hasValid(row["Special_Tactics"]) ? row["Special_Tactics"] : "";
+      const notes = hasValid(row["Notes"]) ? row["Notes"] : "";
+      const flags = flagsHtmlFromRow(row);
 
-  function statePopupHtml(stateName, ab) {
-    const rows = rowsByState.get(ab) || [];
-    const count = rows.length;
-    return `<strong>${stateName} (${ab})</strong><br>${count} state record${count === 1 ? "" : "s"} found.`;
+      let bandsHtml = "";
+      if (xVal || kaVal || kVal) {
+        bandsHtml += `<div><strong>Bands</strong></div>`;
+        if (xVal)  bandsHtml += `<div>- <strong>X:</strong><br>${xVal}</div>`;
+        if (kaVal) bandsHtml += `<div style="margin-top:4px;">- <strong>Ka:</strong><br>${kaVal}</div>`;
+        if (kVal)  bandsHtml += `<div style="margin-top:4px;">- <strong>K:</strong><br>${kVal}</div>`;
+      }
+
+      const div = document.createElement("div");
+      div.className = "record";
+      div.innerHTML = `
+        <div class="record-header">${idx + 1}. ${agency}</div>
+        ${bandsHtml}
+        ${lidar ? `<div style="margin-top:6px;"><strong>Lidar:</strong><br>${lidar}</div>` : ""}
+        ${flags ? `${flags}` : ""}
+        ${tactics ? `<div style="margin-top:6px;"><strong>Special tactics:</strong><br>${tactics}</div>` : ""}
+        ${notes ? `<div style="margin-top:6px;"><strong>Notes:</strong><br>${notes}</div>` : ""}
+      `;
+      stateRecordsEl.appendChild(div);
+    });
   }
 
   // =========================
@@ -806,10 +796,7 @@
 
     if (kaFreqMode) {
       if (countyMatchesKaFreqSet(geoid, kaFreqChoice)) {
-        if (kaFreqChoice === "33.8") s.fillColor = "#2b6cb0";
-        else if (kaFreqChoice === "34.7") s.fillColor = "#1f9d8a";
-        else if (kaFreqChoice === "35.5") s.fillColor = "#1a365d";
-        else s.fillColor = "blue";
+        s.fillColor = "blue";
         s.fillOpacity = 0.60;
       }
       return s;
@@ -833,6 +820,7 @@
     if (matches.length === 0) return s;
 
     const colorMap = { x:"gold", k:"orange", ka:"blue", lidar:"red", de:"purple" };
+
     if (matches.length === 1) {
       s.fillColor = colorMap[matches[0]] || "green";
       s.fillOpacity = 0.50;
@@ -869,57 +857,112 @@
         const p = (f && f.properties) ? f.properties : {};
         return normalizeGeoid(p.GEOID || p.geoid || p.GEOID10 || p.GEO_ID || "");
       },
-      vectorTileLayerStyles: {
-        sliced: props => styleForProps(props)
-      }
+      vectorTileLayerStyles: { sliced: props => styleForProps(props) }
     });
 
     vgLayer.addTo(map);
 
     vgLayer.on("click", (e) => {
-      try {
-        // If State Mode is on, ignore county clicks.
-        if (stateMode) return;
+      if (stateMode) return;
 
-        const props =
-          (e && e.layer && e.layer.properties) ? e.layer.properties :
-          (e && e.properties) ? e.properties :
-          {};
+      const props =
+        (e && e.layer && e.layer.properties) ? e.layer.properties :
+        (e && e.properties) ? e.properties : {};
 
-        lastClickedProps = props;
+      lastClickedProps = props;
 
-        const geoid = normalizeGeoid(props.GEOID || props.geoid || props.GEOID10 || props.GEO_ID || "");
+      const geoid = normalizeGeoid(props.GEOID || props.geoid || props.GEOID10 || props.GEO_ID || "");
 
-        if (selectedId) vgLayer.resetFeatureStyle(selectedId);
-        selectedId = geoid || null;
+      if (selectedId) vgLayer.resetFeatureStyle(selectedId);
+      selectedId = geoid || null;
 
-        if (selectedId) {
-          const sel = styleForProps(props);
-          sel.weight = 3;
-          sel.color = "#000";
-          vgLayer.setFeatureStyle(selectedId, sel);
-        }
-
-        renderCountyInfo(props);
-
-        L.popup()
-          .setLatLng(e.latlng)
-          .setContent(popupHtml(props))
-          .openOn(map);
-      } catch (err) {
-        console.error("VG CLICK HANDLER ERROR:", err);
+      if (selectedId) {
+        const sel = styleForProps(props);
+        sel.weight = 3;
+        sel.color = "#000";
+        vgLayer.setFeatureStyle(selectedId, sel);
       }
+
+      renderCountyInfo(props);
+
+      L.popup()
+        .setLatLng(e.latlng)
+        .setContent(popupHtml(props))
+        .openOn(map);
     });
   }
 
   // =========================
-  // KA DROPDOWN OPEN/CLOSE
+  // STATE BORDERS + CLICKABLE STATES
   // =========================
-  function setKaDropdown(open) {
-    document.getElementById("kaDropdown").classList.toggle("open", !!open);
+  async function addStateBordersAndClickableStates() {
+    const res = await fetch(STATE_BORDERS_URL);
+    if (!res.ok) throw new Error("StateBorders fetch failed: " + res.status);
+    const statesGeo = await res.json();
+
+    map.createPane("statesPane");
+    map.getPane("statesPane").style.zIndex = 690;
+    map.getPane("popupPane").style.zIndex = 900;
+
+    if (statesLayer) map.removeLayer(statesLayer);
+
+    statesLayer = L.geoJSON(statesGeo, {
+      pane: "statesPane",
+      interactive: true,
+      style: () => ({
+        color: "#000",
+        weight: 4,
+        opacity: 0.9,
+        fill: true,
+        fillOpacity: 0.00
+      }),
+      onEachFeature: (feature, layer) => {
+        layer.on("click", (e) => {
+          if (!stateMode) return;
+
+          const p = (feature && feature.properties) ? feature.properties : {};
+          const ab = getStateAbbrevFromProps(p);
+          if (!ab) return;
+
+          lastClickedStateAbbrev = ab;
+          renderStateInfo(ab);
+
+          const stateName = getStateNameFromProps(p, ab);
+          const count = (rowsByState.get(ab) || []).length;
+
+          L.popup()
+            .setLatLng(e.latlng)
+            .setContent(`<strong>${stateName} (${ab})</strong><br>${count} state record${count===1?"":"s"} found.`)
+            .openOn(map);
+        });
+      }
+    }).addTo(map);
+
+    setStateMode(stateMode);
   }
-  function isKaDropdownOpen() {
-    return document.getElementById("kaDropdown").classList.contains("open");
+
+  function setStateMode(on) {
+    stateMode = !!on;
+
+    if (statesLayer) {
+      statesLayer.eachLayer(layer => {
+        layer.options.interactive = stateMode;
+        if (layer.getElement) {
+          const el = layer.getElement();
+          if (el) el.style.pointerEvents = stateMode ? "auto" : "none";
+        }
+      });
+    }
+
+    setPanelsForMode();
+
+    if (stateMode) {
+      if (lastClickedStateAbbrev) renderStateInfo(lastClickedStateAbbrev);
+      else {
+        document.getElementById("state-name").textContent = "None selected";
+        document.getElementById("state-records").innerHTML = "";
+      }
+    }
   }
 
   // =========================
@@ -929,8 +972,7 @@
   function setButtonDisabled(btn, on) { btn.classList.toggle("disabled", !!on); btn.disabled = !!on; }
 
   function renderFilterButtons() {
-    const stateBtn = document.getElementById("stateModeBtn");
-    setButtonActive(stateBtn, stateMode);
+    setButtonActive(document.getElementById("stateModeBtn"), stateMode);
 
     document.querySelectorAll(".filter-btn[data-filter]").forEach(btn => {
       const f = btn.getAttribute("data-filter");
@@ -945,115 +987,29 @@
       }
     });
 
-    const kaArrowBtn = document.getElementById("kaArrowBtn");
-    kaArrowBtn.classList.toggle("active", kaFreqMode);
-    kaArrowBtn.disabled = false;
-    kaArrowBtn.classList.remove("disabled");
-  }
+    document.querySelectorAll(".ka-item").forEach(item => {
+      const v = item.getAttribute("data-kafreq");
+      const isActive =
+        (!kaFreqMode && v === "off") ||
+        (kaFreqMode && v === kaFreqChoice);
+      item.classList.toggle("active", isActive);
+    });
 
-  // =========================
-  // STATE LAYER (CLICKABLE)
-  // =========================
-  async function addStateBordersAndClickableStates() {
-    const res = await fetch(STATE_BORDERS_URL);
-    if (!res.ok) throw new Error("StateBorders fetch failed: " + res.status);
-    const statesGeo = await res.json();
+    document.getElementById("kaArrowBtn").classList.toggle("active", kaFreqMode);
 
-    map.createPane("statesPane");
-    map.getPane("statesPane").style.zIndex = 690;   // above counties, below popups
-    map.getPane("popupPane").style.zIndex = 900;    // popups always on top
+    document.getElementById("modeHint").style.display = stateMode ? "block" : "none";
 
-    // Remove existing if present
-    if (statesLayer) {
-      map.removeLayer(statesLayer);
-      statesLayer = null;
-    }
-
-    statesLayer = L.geoJSON(statesGeo, {
-      pane: "statesPane",
-      // Always add, but we will toggle interactivity via setStateMode()
-      interactive: true,
-      style: (feature) => ({
-        color: "#000",
-        weight: 4,
-        opacity: 0.9,
-        fill: true,          // IMPORTANT: clickable area
-        fillOpacity: 0.00    // invisible fill
-      }),
-      onEachFeature: (feature, layer) => {
-        layer.on("click", (e) => {
-          if (!stateMode) return;
-
-          const p = (feature && feature.properties) ? feature.properties : {};
-          const ab = getStateAbbrevFromProps(p);
-          if (!ab) return;
-
-          lastClickedStateAbbrev = ab;
-
-          const stateName = getStateNameFromProps(p, ab);
-
-          renderStateInfo(ab);
-
-          L.popup()
-            .setLatLng(e.latlng)
-            .setContent(statePopupHtml(stateName, ab))
-            .openOn(map);
-        });
-      }
-    }).addTo(map);
-
-    setStateMode(stateMode); // apply initial interactivity state
-  }
-
-  function setStateMode(on) {
-    stateMode = !!on;
-
-    // Make the state layer actually clickable only in state mode
-    if (statesLayer) {
-      statesLayer.eachLayer(layer => {
-        if (stateMode) {
-          layer.options.interactive = true;
-          if (layer.getElement) {
-            const el = layer.getElement();
-            if (el) el.style.pointerEvents = "auto";
-          }
-        } else {
-          layer.options.interactive = false;
-          if (layer.getElement) {
-            const el = layer.getElement();
-            if (el) el.style.pointerEvents = "none";
-          }
-        }
-      });
-    }
-
-    // Also close Ka dropdown if open
-    setKaDropdown(false);
-
-    // Switch panels
-    setPanelsForMode();
-
-    // If turning on state mode, clear county selection popup expectation
-    if (stateMode) {
-      // keep map shading as-is; just change click behavior
-      // show last selected state if available
-      if (lastClickedStateAbbrev) renderStateInfo(lastClickedStateAbbrev);
-      else {
-        document.getElementById("state-name").textContent = "None selected";
-        document.getElementById("state-records").innerHTML = "";
-      }
-    }
-
-    renderFilterButtons();
+    updateKaLabel();
   }
 
   // =========================
   // INIT FILTERS
   // =========================
   function initFilters() {
-    // State mode toggle button
+    // State toggle
     document.getElementById("stateModeBtn").addEventListener("click", () => {
       setStateMode(!stateMode);
+      renderFilterButtons();
     });
 
     // Normal filter buttons
@@ -1082,47 +1038,57 @@
       });
     });
 
-    // Ka arrow opens dropdown
+    // Ka arrow toggles dropdown
     document.getElementById("kaArrowBtn").addEventListener("click", (e) => {
       e.stopPropagation();
       setKaDropdown(!isKaDropdownOpen());
     });
 
-    // Ka dropdown selection enables/disables Ka freq mode
-    document.getElementById("kaFreqSelect").addEventListener("change", async (e) => {
-      const val = e.target.value;
+    // Ka dropdown items
+    document.querySelectorAll(".ka-item").forEach(item => {
+      item.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        const val = item.getAttribute("data-kafreq");
 
-      if (val === "off") {
-        if (kaFreqMode) {
-          kaFreqMode = false;
-          allMode = savedAllMode;
-          selectedFilters = new Set(savedSelectedFilters);
+        if (val === "off") {
+          if (kaFreqMode) {
+            kaFreqMode = false;
+            allMode = savedAllMode;
+            selectedFilters = new Set(savedSelectedFilters);
+          }
+        } else {
+          if (!kaFreqMode) {
+            savedAllMode = allMode;
+            savedSelectedFilters = new Set(selectedFilters);
+          }
+          kaFreqMode = true;
+          kaFreqChoice = val; // any | 33.8 | 34.7 | 35.5
+          allMode = false;
+          selectedFilters = new Set(["ka"]);
         }
-      } else {
-        if (!kaFreqMode) {
-          savedAllMode = allMode;
-          savedSelectedFilters = new Set(selectedFilters);
-        }
 
-        kaFreqMode = true;
-        kaFreqChoice = val;
-
-        allMode = false;
-        selectedFilters = new Set(["ka"]);
-      }
-
-      renderFilterButtons();
-      await rebuildLayer();
-      if (lastClickedProps && !stateMode) renderCountyInfo(lastClickedProps);
+        setKaDropdown(false);
+        renderFilterButtons();
+        await rebuildLayer();
+        if (lastClickedProps && !stateMode) renderCountyInfo(lastClickedProps);
+      });
     });
 
-    // close Ka dropdown on outside click
+    // Close Ka dropdown on outside click
     document.addEventListener("click", (e) => {
       const wrap = document.getElementById("kaSplit");
       if (!wrap.contains(e.target)) setKaDropdown(false);
     });
 
     renderFilterButtons();
+  }
+
+  // Ka dropdown open/close
+  function setKaDropdown(open) {
+    document.getElementById("kaDropdown").classList.toggle("open", !!open);
+  }
+  function isKaDropdownOpen() {
+    return document.getElementById("kaDropdown").classList.contains("open");
   }
 
   // =========================
@@ -1133,9 +1099,9 @@
       setStatus("Loading CSV data…");
       await Promise.all([loadCountyCsv(), loadStateAgencyCsv()]);
 
-      setStatus("Loading shapes…");
+      setStatus("Loading county shapes…");
       const geoRes = await fetch(GEOJSON_URL);
-      if (!geoRes.ok) throw new Error("GeoJSON fetch failed: " + geoRes.status);
+      if (!geoRes.ok) throw new Error("GeoJSON fetch failed: " + res.status);
       geojsonCache = await geoRes.json();
 
       map = L.map("map").setView(DEFAULT_CENTER, DEFAULT_ZOOM);
