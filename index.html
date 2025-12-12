@@ -71,6 +71,77 @@
     }
     .filter-btn.active .tick { visibility: visible; }
 
+    .filter-btn.disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    /* Ka split button + dropdown arrow */
+    .ka-split {
+      position: relative;
+      display: inline-flex;
+      align-items: stretch;
+      gap: 0;
+    }
+
+    .ka-split .filter-btn {
+      border-top-right-radius: 0;
+      border-bottom-right-radius: 0;
+    }
+
+    .ka-arrow {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      padding: 0;
+      border: 1px solid #ccc;
+      border-left: 0;
+      background: #f7f7f7;
+      border-top-right-radius: 8px;
+      border-bottom-right-radius: 8px;
+      cursor: pointer;
+      font-size: 12px;
+      line-height: 1;
+      user-select: none;
+    }
+
+    .ka-arrow.active {
+      background: #333;
+      color: #fff;
+      border-color: #333;
+    }
+
+    .ka-arrow.disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .ka-dropdown {
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 0;
+      z-index: 9999;
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      padding: 8px;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+      display: none;
+      min-width: 220px;
+    }
+
+    .ka-dropdown.open { display: block; }
+
+    .ka-dropdown select {
+      width: 100%;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      background: #fff;
+      font-size: 12px;
+    }
+
     .record {
       border: 1px solid #eee;
       border-radius: 8px;
@@ -93,10 +164,10 @@
     <h1>Enforcement Map</h1>
     <div id="status">Loading…</div>
 
-    <!-- TOGGLE BUTTON FILTERS -->
     <div class="filters">
       <div class="filters-title">Filters (multi-select):</div>
-      <div class="filter-bar">
+
+      <div class="filter-bar" id="filterBar">
         <button class="filter-btn active" data-filter="all" type="button">
           <div>All</div><div class="tick">✅</div>
         </button>
@@ -109,9 +180,23 @@
           <div>K</div><div class="tick">✅</div>
         </button>
 
-        <button class="filter-btn active" data-filter="ka" type="button">
-          <div>Ka</div><div class="tick">✅</div>
-        </button>
+        <!-- Ka button with dropdown arrow -->
+        <div class="ka-split" id="kaSplit">
+          <button class="filter-btn active" data-filter="ka" type="button">
+            <div>Ka</div><div class="tick">✅</div>
+          </button>
+          <button class="ka-arrow" id="kaArrowBtn" type="button" aria-label="Ka frequency options">▾</button>
+
+          <div class="ka-dropdown" id="kaDropdown">
+            <select id="kaFreqSelect">
+              <option value="off">Ka (normal)</option>
+              <option value="any">Ka Freq: Any</option>
+              <option value="33.8">Ka Freq: 33.8</option>
+              <option value="34.7">Ka Freq: 34.7</option>
+              <option value="35.5">Ka Freq: 35.5</option>
+            </select>
+          </div>
+        </div>
 
         <button class="filter-btn active" data-filter="lidar" type="button">
           <div>Lidar</div><div class="tick">✅</div>
@@ -153,7 +238,47 @@
   const DEFAULT_CENTER = [39.5, -98.35];
   const DEFAULT_ZOOM = 4;
 
-  const FILTERS = ["x", "k", "ka", "lidar", "de"]; // order matters for priority/coloring
+  const FILTERS = ["x", "k", "ka", "lidar", "de"];
+
+  // =========================
+  // KA FREQ KEYWORDS
+  // =========================
+  const KA_338 = [
+    /33\.8/i,
+    /\bbee\b/i,
+    /\bpython\b/i,
+    /\benforcer\b/i,
+    /\branger\b/i,
+    /\bmph\b/i,
+    /\bspeed\s*gun\b/i,
+    /\bspeedgun\b/i
+  ];
+
+  const KA_347 = [
+    /34\.7/i,
+    /\bstalker\b/i,
+    /\bdsr\b/i,
+    /\bdual\b/i,
+    /\b2x\b/i,
+    /\bmdr\b/i,
+    /\bsdr\b/i,
+    /\bsl\b/i,
+    /\batr\b/i
+  ];
+
+  const KA_355 = [
+    /35\.5/i,
+    /\bgolden\b/i,
+    /\beagle\b/i,
+    /\bkustom\b/i,
+    /\bdecatur\b/i,
+    /\braptor\b/i,
+    /\bgenesis\b/i,
+    /\bscout\b/i,
+    /\bghd\b/i,
+    /\btalon\b/i,
+    /\brp-?1\b/i   // RP1 / RP-1
+  ];
 
   // =========================
   // STATE
@@ -162,9 +287,15 @@
   let selectedId = null;
   let lastClickedProps = null;
 
-  // “All” mode means: behave like before (everything selected)
+  // Normal mode filters
   let allMode = true;
   let selectedFilters = new Set(FILTERS);
+
+  // Ka Frequency Mode state
+  let kaFreqMode = false;
+  let kaFreqChoice = "any"; // any | 33.8 | 34.7 | 35.5
+  let savedAllMode = true;
+  let savedSelectedFilters = new Set(FILTERS);
 
   const rowsByGeoid = new Map();
 
@@ -173,7 +304,12 @@
   const hasKa = new Set();
   const hasLidar = new Set();
   const hasDE = new Set();
-  const hasAnyData = new Set(); // ALL mode -> green if any content
+
+  const hasKa338 = new Set();
+  const hasKa347 = new Set();
+  const hasKa355 = new Set();
+
+  const hasAnyData = new Set();
 
   // =========================
   // HELPERS
@@ -210,8 +346,21 @@
 
   function containsDE(val) {
     if (!hasValid(val)) return false;
-    // DETC / DESL / DE / DE-FOO etc.
     return /\bDE[A-Z0-9_-]*\b/i.test(String(val));
+  }
+
+  function matchAnyRegex(text, regexList) {
+    if (!hasValid(text)) return false;
+    const s = String(text);
+    return regexList.some(r => r.test(s));
+  }
+
+  function detectKaFreqsFromText(kaText) {
+    return {
+      f338: matchAnyRegex(kaText, KA_338),
+      f347: matchAnyRegex(kaText, KA_347),
+      f355: matchAnyRegex(kaText, KA_355)
+    };
   }
 
   function formatMulti(value) {
@@ -262,9 +411,6 @@
     return `<div class="flagline">${lines.map(l => `<div>${l}</div>`).join("")}</div>`;
   }
 
-  // IMPORTANT CHANGE:
-  // A row "counts" as data if it has ANY of: K OR Ka OR Lidar.
-  // (Plus: flags Y or Special_Tactics can also count as meaningful.)
   function rowHasAnyContent(row) {
     const core =
       hasValid(row["K_band"]) ||
@@ -291,6 +437,15 @@
     return false;
   }
 
+  function rowMatchesKaFreq(row, choice) {
+    if (!hasValid(row["Ka_band"])) return false;
+    const d = detectKaFreqsFromText(row["Ka_band"]);
+    if (choice === "33.8") return d.f338;
+    if (choice === "34.7") return d.f347;
+    if (choice === "35.5") return d.f355;
+    return (d.f338 || d.f347 || d.f355); // any
+  }
+
   function countyMatchesFilterSet(geoid, f) {
     if (f === "x") return hasX.has(geoid);
     if (f === "k") return hasK.has(geoid);
@@ -298,6 +453,13 @@
     if (f === "lidar") return hasLidar.has(geoid);
     if (f === "de") return hasDE.has(geoid);
     return false;
+  }
+
+  function countyMatchesKaFreqSet(geoid, choice) {
+    if (choice === "33.8") return hasKa338.has(geoid);
+    if (choice === "34.7") return hasKa347.has(geoid);
+    if (choice === "35.5") return hasKa355.has(geoid);
+    return (hasKa338.has(geoid) || hasKa347.has(geoid) || hasKa355.has(geoid));
   }
 
   // =========================
@@ -308,18 +470,12 @@
     if (!res.ok) throw new Error("CSV fetch failed: " + res.status);
     const text = await res.text();
 
-    const parsed = Papa.parse(text, {
-      header: true,
-      skipEmptyLines: true
-    });
+    const parsed = Papa.parse(text, { header: true, skipEmptyLines: true });
 
     rowsByGeoid.clear();
 
-    hasX.clear();
-    hasK.clear();
-    hasKa.clear();
-    hasLidar.clear();
-    hasDE.clear();
+    hasX.clear(); hasK.clear(); hasKa.clear(); hasLidar.clear(); hasDE.clear();
+    hasKa338.clear(); hasKa347.clear(); hasKa355.clear();
     hasAnyData.clear();
 
     let validRowCount = 0;
@@ -343,7 +499,14 @@
 
       if (hasValid(row["X_band"])) hasX.add(geoid);
       if (hasValid(row["K_band"])) hasK.add(geoid);
-      if (hasValid(row["Ka_band"])) hasKa.add(geoid);
+
+      if (hasValid(row["Ka_band"])) {
+        hasKa.add(geoid);
+        const d = detectKaFreqsFromText(row["Ka_band"]);
+        if (d.f338) hasKa338.add(geoid);
+        if (d.f347) hasKa347.add(geoid);
+        if (d.f355) hasKa355.add(geoid);
+      }
 
       if (hasValid(row["Lidar_Guns"])) hasLidar.add(geoid);
       if (containsDE(row["Lidar_Guns"])) hasDE.add(geoid);
@@ -355,12 +518,12 @@
   }
 
   // =========================
-  // FILTERING FOR UI
+  // FILTERING
   // =========================
   function passesCurrentFilters(row) {
-    // CHANGE: even in ALL mode, only show rows that actually have meaningful content
-    if (allMode) return rowHasAnyContent(row);
+    if (kaFreqMode) return rowMatchesKaFreq(row, kaFreqChoice);
 
+    if (allMode) return rowHasAnyContent(row);
     if (selectedFilters.size === 0) return false;
 
     for (const f of selectedFilters) {
@@ -371,18 +534,6 @@
 
   function updateAllModeFromSelected() {
     allMode = (selectedFilters.size === FILTERS.length);
-  }
-
-  function renderFilterButtons() {
-    const btns = document.querySelectorAll(".filter-btn");
-    btns.forEach(btn => {
-      const f = btn.getAttribute("data-filter");
-      if (f === "all") {
-        btn.classList.toggle("active", allMode);
-      } else {
-        btn.classList.toggle("active", allMode || selectedFilters.has(f));
-      }
-    });
   }
 
   // =========================
@@ -496,7 +647,17 @@
 
     if (!geoid) return s;
 
-    // ALL mode: dark green if any meaningful data exists in this county
+    if (kaFreqMode) {
+      if (countyMatchesKaFreqSet(geoid, kaFreqChoice)) {
+        if (kaFreqChoice === "33.8") s.fillColor = "#2b6cb0";
+        else if (kaFreqChoice === "34.7") s.fillColor = "#1f9d8a";
+        else if (kaFreqChoice === "35.5") s.fillColor = "#1a365d";
+        else s.fillColor = "blue";
+        s.fillOpacity = 0.60;
+      }
+      return s;
+    }
+
     if (allMode) {
       if (hasAnyData.has(geoid)) {
         s.fillColor = "#0B6623";
@@ -512,16 +673,9 @@
       if (!selectedFilters.has(f)) continue;
       if (countyMatchesFilterSet(geoid, f)) matches.push(f);
     }
-
     if (matches.length === 0) return s;
 
-    const colorMap = {
-      x: "gold",
-      k: "orange",
-      ka: "blue",
-      lidar: "red",
-      de: "purple"
-    };
+    const colorMap = { x:"gold", k:"orange", ka:"blue", lidar:"red", de:"purple" };
 
     if (matches.length === 1) {
       s.fillColor = colorMap[matches[0]] || "green";
@@ -529,7 +683,6 @@
       return s;
     }
 
-    // multi-match: distinct color so it’s obvious it matched more than one
     s.fillColor = "cyan";
     s.fillOpacity = 0.55;
     s.weight = 2.0;
@@ -604,13 +757,62 @@
   }
 
   // =========================
-  // FILTER BUTTONS (MULTI-SELECT)
+  // FILTER BUTTON UI
+  // =========================
+  function setButtonActive(btn, on) { btn.classList.toggle("active", !!on); }
+  function setButtonDisabled(btn, on) {
+    btn.classList.toggle("disabled", !!on);
+    btn.disabled = !!on;
+  }
+
+  function renderFilterButtons() {
+    const kaArrowBtn = document.getElementById("kaArrowBtn");
+
+    document.querySelectorAll(".filter-btn[data-filter]").forEach(btn => {
+      const f = btn.getAttribute("data-filter");
+
+      if (kaFreqMode) {
+        // Ka freq mode: Ka-only, lock normal filters
+        setButtonActive(btn, f === "ka");
+        setButtonDisabled(btn, true);
+      } else {
+        setButtonDisabled(btn, false);
+        if (f === "all") setButtonActive(btn, allMode);
+        else setButtonActive(btn, allMode || selectedFilters.has(f));
+      }
+    });
+
+    // Ka arrow stays usable even in Ka freq mode
+    kaArrowBtn.classList.toggle("active", kaFreqMode);
+    kaArrowBtn.classList.toggle("disabled", false);
+    kaArrowBtn.disabled = false;
+  }
+
+  function updateAllModeFromSelected() {
+    allMode = (selectedFilters.size === FILTERS.length);
+  }
+
+  // =========================
+  // KA DROPDOWN OPEN/CLOSE
+  // =========================
+  function setKaDropdown(open) {
+    const dd = document.getElementById("kaDropdown");
+    dd.classList.toggle("open", !!open);
+  }
+
+  function isKaDropdownOpen() {
+    return document.getElementById("kaDropdown").classList.contains("open");
+  }
+
+  // =========================
+  // INIT FILTERS
   // =========================
   function initFilters() {
-    const btns = document.querySelectorAll(".filter-btn");
-
-    btns.forEach(btn => {
+    // Normal filter buttons
+    document.querySelectorAll(".filter-btn[data-filter]").forEach(btn => {
       btn.addEventListener("click", async () => {
+        if (kaFreqMode) return; // locked in Ka freq mode
+
         const f = btn.getAttribute("data-filter");
 
         if (f === "all") {
@@ -628,16 +830,61 @@
 
         renderFilterButtons();
         await rebuildLayer();
-
         if (lastClickedProps) renderCountyInfo(lastClickedProps);
       });
+    });
+
+    // Ka arrow toggles dropdown visibility
+    document.getElementById("kaArrowBtn").addEventListener("click", (e) => {
+      e.stopPropagation();
+      setKaDropdown(!isKaDropdownOpen());
+    });
+
+    // Selecting a Ka freq option turns Ka freq mode on/off
+    document.getElementById("kaFreqSelect").addEventListener("change", async (e) => {
+      const val = e.target.value;
+
+      if (val === "off") {
+        // disable freq mode, restore normal filters
+        if (kaFreqMode) {
+          kaFreqMode = false;
+          allMode = savedAllMode;
+          selectedFilters = new Set(savedSelectedFilters);
+        }
+      } else {
+        // enable freq mode
+        if (!kaFreqMode) {
+          savedAllMode = allMode;
+          savedSelectedFilters = new Set(selectedFilters);
+        }
+
+        kaFreqMode = true;
+        kaFreqChoice = val; // any / 33.8 / 34.7 / 35.5
+
+        // force Ka-only behavior (display-wise)
+        allMode = false;
+        selectedFilters = new Set(["ka"]);
+      }
+
+      renderFilterButtons();
+      await rebuildLayer();
+      if (lastClickedProps) renderCountyInfo(lastClickedProps);
+
+      // keep dropdown open after change? (you can close it if you want)
+      // setKaDropdown(false);
+    });
+
+    // Close dropdown when clicking outside
+    document.addEventListener("click", (e) => {
+      const wrap = document.getElementById("kaSplit");
+      if (!wrap.contains(e.target)) setKaDropdown(false);
     });
 
     renderFilterButtons();
   }
 
   // =========================
-  // STATE BORDERS (BOLD LINES)
+  // STATE BORDERS
   // =========================
   async function addStateBorders() {
     const res = await fetch(STATE_BORDERS_URL);
@@ -645,18 +892,13 @@
     const statesGeo = await res.json();
 
     map.createPane("statesPane");
-    map.getPane("statesPane").style.zIndex = 690;   // above counties, below popups
-    map.getPane("popupPane").style.zIndex = 900;    // popups always on top
+    map.getPane("statesPane").style.zIndex = 690;
+    map.getPane("popupPane").style.zIndex = 900;
 
     L.geoJSON(statesGeo, {
       pane: "statesPane",
       interactive: false,
-      style: {
-        color: "#000",
-        weight: 4,
-        opacity: 0.9,
-        fill: false
-      }
+      style: { color: "#000", weight: 4, opacity: 0.9, fill: false }
     }).addTo(map);
   }
 
@@ -670,7 +912,7 @@
 
       setStatus("Loading county shapes…");
       const geoRes = await fetch(GEOJSON_URL);
-      if (!geoRes.ok) throw new Error("GeoJSON fetch failed: " + res.status);
+      if (!geoRes.ok) throw new Error("GeoJSON fetch failed: " + geoRes.status);
       geojsonCache = await geoRes.json();
 
       map = L.map("map").setView(DEFAULT_CENTER, DEFAULT_ZOOM);
