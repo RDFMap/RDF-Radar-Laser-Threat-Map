@@ -436,25 +436,26 @@
   // LOAD STATE BORDERS (BOLD LINES)
   // =========================
   async function addStateBorders() {
-    const res = await fetch(STATE_BORDERS_URL);
-    if (!res.ok) throw new Error("StateBorders fetch failed: " + res.status);
-    const statesGeo = await res.json();
+  const res = await fetch(STATE_BORDERS_URL);
+  if (!res.ok) throw new Error("StateBorders fetch failed: " + res.status);
+  const statesGeo = await res.json();
 
-    // pane above counties
-    map.createPane("statesPane");
-    map.getPane("statesPane").style.zIndex = 700;
+  map.createPane("statesPane");
+  map.getPane("statesPane").style.zIndex = 690;  // above countiesPane (650), below popupPane
+  map.getPane("popupPane").style.zIndex = 900;   // force popups above everything
 
-    L.geoJSON(statesGeo, {
-      pane: "statesPane",
-      interactive: false,   // don't block county clicks
-      style: {
-        color: "#000",
-        weight: 4,          // ✅ thicker state borders (adjust here)
-        opacity: 0.9,
-        fill: false
-      }
-    }).addTo(map);
-  }
+  L.geoJSON(statesGeo, {
+    pane: "statesPane",
+    interactive: false,
+    style: {
+      color: "#000",
+      weight: 4,
+      opacity: 0.9,
+      fill: false
+    }
+  }).addTo(map);
+}
+
 
   // =========================
   // BOOTSTRAP
