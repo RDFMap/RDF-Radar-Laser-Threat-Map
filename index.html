@@ -29,7 +29,7 @@
     #sidebar h1 { font-size: 20px; margin: 0 0 8px; }
     #sidebar h2 { font-size: 16px; margin-top: 16px; margin-bottom: 8px; }
     #status { font-size: 13px; color: #666; margin-top: 4px; }
-    #county-name { font-weight: 700; }
+    #county-name, #state-name { font-weight: 700; }
 
     .filters { margin: 10px 0; }
     .filters-title { font-size:13px; font-weight:600; margin-bottom: 6px; }
@@ -71,10 +71,7 @@
     }
     .filter-btn.active .tick { visibility: visible; }
 
-    .filter-btn.disabled {
-      opacity: 0.45;
-      cursor: not-allowed;
-    }
+    .filter-btn.disabled { opacity: 0.45; cursor: not-allowed; }
 
     /* Ka split button + dropdown arrow */
     .ka-split {
@@ -112,10 +109,7 @@
       border-color: #333;
     }
 
-    .ka-arrow.disabled {
-      opacity: 0.45;
-      cursor: not-allowed;
-    }
+    .ka-arrow.disabled { opacity: 0.45; cursor: not-allowed; }
 
     .ka-dropdown {
       position: absolute;
@@ -153,6 +147,12 @@
 
     .flagline { margin-top: 6px; }
     .flagline div { margin-top: 3px; }
+
+    .hint {
+      font-size: 12px;
+      color: #666;
+      margin-top: 6px;
+    }
   </style>
 </head>
 
@@ -168,6 +168,11 @@
       <div class="filters-title">Filters (multi-select):</div>
 
       <div class="filter-bar" id="filterBar">
+        <!-- State mode toggle -->
+        <button class="filter-btn" id="stateModeBtn" type="button">
+          <div>State</div><div class="tick">✅</div>
+        </button>
+
         <button class="filter-btn active" data-filter="all" type="button">
           <div>All</div><div class="tick">✅</div>
         </button>
@@ -206,13 +211,29 @@
           <div>DE</div><div class="tick">✅</div>
         </button>
       </div>
+
+      <div class="hint" id="modeHint" style="display:none;">
+        State Mode is on. Click a state to view state agencies.
+      </div>
     </div>
 
-    <h2>Selected County</h2>
-    <div id="county-name">None selected</div>
+    <!-- County UI -->
+    <div id="countyPanel">
+      <h2>Selected County</h2>
+      <div id="county-name">None selected</div>
 
-    <h2>Agencies / Records</h2>
-    <div id="records"></div>
+      <h2>Agencies / Records</h2>
+      <div id="records"></div>
+    </div>
+
+    <!-- State UI -->
+    <div id="statePanel" style="display:none;">
+      <h2>Selected State</h2>
+      <div id="state-name">None selected</div>
+
+      <h2>State Agencies / Records</h2>
+      <div id="state-records"></div>
+    </div>
   </div>
 </div>
 
@@ -229,8 +250,11 @@
   // =========================
   // CONFIG
   // =========================
-  const CSV_URL =
+  const COUNTY_CSV_URL =
     "https://docs.google.com/spreadsheets/d/e/2PACX-1vR4ZdepcnMW0OCvCvgRTWPFGSuaQ6u75caFu8zF_Sh-VY525EwU81XzaiJhnvQTCcfHndclCHAQv9DT/pub?gid=2097640781&single=true&output=csv";
+
+  const STATE_AGENCY_CSV_URL =
+    "https://docs.google.com/spreadsheets/d/e/2PACX-1vR4ZdepcnMW0OCvCvgRTWPFGSuaQ6u75caFu8zF_Sh-VY525EwU81XzaiJhnvQTCcfHndclCHAQv9DT/pub?gid=507352241&single=true&output=csv";
 
   const GEOJSON_URL = "./allCounties.json";
   const STATE_BORDERS_URL = "./StateBorders.json";
@@ -241,49 +265,42 @@
   const FILTERS = ["x", "k", "ka", "lidar", "de"];
 
   // =========================
+  // STATE NAME MAP (fallback)
+  // =========================
+  const STATE_NAME_MAP = {
+    AL:"Alabama", AK:"Alaska", AZ:"Arizona", AR:"Arkansas", CA:"California", CO:"Colorado", CT:"Connecticut", DE:"Delaware",
+    FL:"Florida", GA:"Georgia", HI:"Hawaii", ID:"Idaho", IL:"Illinois", IN:"Indiana", IA:"Iowa", KS:"Kansas", KY:"Kentucky",
+    LA:"Louisiana", ME:"Maine", MD:"Maryland", MA:"Massachusetts", MI:"Michigan", MN:"Minnesota", MS:"Mississippi",
+    MO:"Missouri", MT:"Montana", NE:"Nebraska", NV:"Nevada", NH:"New Hampshire", NJ:"New Jersey", NM:"New Mexico",
+    NY:"New York", NC:"North Carolina", ND:"North Dakota", OH:"Ohio", OK:"Oklahoma", OR:"Oregon", PA:"Pennsylvania",
+    RI:"Rhode Island", SC:"South Carolina", SD:"South Dakota", TN:"Tennessee", TX:"Texas", UT:"Utah", VT:"Vermont",
+    VA:"Virginia", WA:"Washington", WV:"West Virginia", WI:"Wisconsin", WY:"Wyoming",
+    DC:"District of Columbia"
+  };
+
+  // =========================
   // KA FREQ KEYWORDS
   // =========================
   const KA_338 = [
-    /33\.8/i,
-    /\bbee\b/i,
-    /\bpython\b/i,
-    /\benforcer\b/i,
-    /\branger\b/i,
-    /\bmph\b/i,
-    /\bspeed\s*gun\b/i,
-    /\bspeedgun\b/i
+    /33\.8/i, /\bbee\b/i, /\bpython\b/i, /\benforcer\b/i, /\branger\b/i, /\bmph\b/i,
+    /\bspeed\s*gun\b/i, /\bspeedgun\b/i
   ];
-
   const KA_347 = [
-    /34\.7/i,
-    /\bstalker\b/i,
-    /\bdsr\b/i,
-    /\bdual\b/i,
-    /\b2x\b/i,
-    /\bmdr\b/i,
-    /\bsdr\b/i,
-    /\bsl\b/i,
-    /\batr\b/i
+    /34\.7/i, /\bstalker\b/i, /\bdsr\b/i, /\bdual\b/i, /\b2x\b/i, /\bmdr\b/i, /\bsdr\b/i, /\bsl\b/i, /\batr\b/i
   ];
-
   const KA_355 = [
-    /35\.5/i,
-    /\bgolden\b/i,
-    /\beagle\b/i,
-    /\bkustom\b/i,
-    /\bdecatur\b/i,
-    /\braptor\b/i,
-    /\bgenesis\b/i,
-    /\bscout\b/i,
-    /\bghd\b/i,
-    /\btalon\b/i,
-    /\brp-?1\b/i   // RP1 / RP-1
+    /35\.5/i, /\bgolden\b/i, /\beagle\b/i, /\bkustom\b/i, /\bdecatur\b/i, /\braptor\b/i, /\bgenesis\b/i,
+    /\bscout\b/i, /\bghd\b/i, /\btalon\b/i, /\brp-?1\b/i
   ];
 
   // =========================
   // STATE
   // =========================
   let map, vgLayer, geojsonCache;
+
+  let statesLayer = null;          // clickable state polygons layer
+  let stateMode = false;           // <--- NEW
+
   let selectedId = null;
   let lastClickedProps = null;
 
@@ -293,23 +310,25 @@
 
   // Ka Frequency Mode state
   let kaFreqMode = false;
-  let kaFreqChoice = "any"; // any | 33.8 | 34.7 | 35.5
+  let kaFreqChoice = "any";
   let savedAllMode = true;
   let savedSelectedFilters = new Set(FILTERS);
 
+  // County data
   const rowsByGeoid = new Map();
-
   const hasX = new Set();
   const hasK = new Set();
   const hasKa = new Set();
   const hasLidar = new Set();
   const hasDE = new Set();
-
   const hasKa338 = new Set();
   const hasKa347 = new Set();
   const hasKa355 = new Set();
-
   const hasAnyData = new Set();
+
+  // State agency data
+  const rowsByState = new Map();   // "GA" -> [rows]
+  let lastClickedStateAbbrev = null;
 
   // =========================
   // HELPERS
@@ -412,15 +431,10 @@
   }
 
   function rowHasAnyContent(row) {
-    const core =
-      hasValid(row["K_band"]) ||
-      hasValid(row["Ka_band"]) ||
-      hasValid(row["Lidar_Guns"]);
-
+    const core = hasValid(row["K_band"]) || hasValid(row["Ka_band"]) || hasValid(row["Lidar_Guns"]);
     if (core) return true;
 
     if (hasValid(row["Special_Tactics"])) return true;
-
     if (isYes(getField(row, "Overpass_shots", "Overpass shots", "Overpass"))) return true;
     if (isYes(getField(row, "Rear_shots", "Rear shots", "Rear"))) return true;
     if (isYes(getField(row, "Ghost or Unmarked Unit", "Ghost/Unmarked", "Ghost", "Unmarked Unit"))) return true;
@@ -443,7 +457,7 @@
     if (choice === "33.8") return d.f338;
     if (choice === "34.7") return d.f347;
     if (choice === "35.5") return d.f355;
-    return (d.f338 || d.f347 || d.f355); // any
+    return (d.f338 || d.f347 || d.f355);
   }
 
   function countyMatchesFilterSet(geoid, f) {
@@ -462,18 +476,45 @@
     return (hasKa338.has(geoid) || hasKa347.has(geoid) || hasKa355.has(geoid));
   }
 
+  // Robust state abbrev getter from GeoJSON props or CSV row
+  function normalizeStateAbbrev(v) {
+    const t = String(v ?? "").trim().toUpperCase();
+    if (/^[A-Z]{2}$/.test(t)) return t;
+    return "";
+  }
+
+  function getStateAbbrevFromProps(p) {
+    const candidates = [
+      p.STUSPS, p.stusps,
+      p.STATE, p.state,
+      p.POSTAL, p.postal,
+      p.ABBR, p.abbr,
+      p.USPS, p.usps
+    ];
+    for (const c of candidates) {
+      const ab = normalizeStateAbbrev(c);
+      if (ab) return ab;
+    }
+    return "";
+  }
+
+  function getStateNameFromProps(p, ab) {
+    const name = p.NAME || p.name || p.State || p.STATE_NAME || p.state_name || "";
+    if (hasValid(name)) return String(name).trim();
+    return STATE_NAME_MAP[ab] || ab || "Unknown";
+  }
+
   // =========================
-  // LOAD CSV
+  // LOAD COUNTY CSV
   // =========================
-  async function loadCsv() {
-    const res = await fetch(CSV_URL);
-    if (!res.ok) throw new Error("CSV fetch failed: " + res.status);
+  async function loadCountyCsv() {
+    const res = await fetch(COUNTY_CSV_URL);
+    if (!res.ok) throw new Error("County CSV fetch failed: " + res.status);
     const text = await res.text();
 
     const parsed = Papa.parse(text, { header: true, skipEmptyLines: true });
 
     rowsByGeoid.clear();
-
     hasX.clear(); hasK.clear(); hasKa.clear(); hasLidar.clear(); hasDE.clear();
     hasKa338.clear(); hasKa347.clear(); hasKa355.clear();
     hasAnyData.clear();
@@ -514,7 +555,48 @@
       if (rowHasAnyContent(row)) hasAnyData.add(geoid);
     }
 
-    console.log("Loaded valid county rows:", validRowCount);
+    console.log("Loaded county rows:", validRowCount);
+  }
+
+  // =========================
+  // LOAD STATE AGENCY CSV
+  // =========================
+  async function loadStateAgencyCsv() {
+    const res = await fetch(STATE_AGENCY_CSV_URL);
+    if (!res.ok) throw new Error("State Agency CSV fetch failed: " + res.status);
+    const text = await res.text();
+
+    const parsed = Papa.parse(text, { header: true, skipEmptyLines: true });
+
+    rowsByState.clear();
+    let rowCount = 0;
+
+    for (const raw of parsed.data) {
+      if (!raw) continue;
+
+      // Expect a "State" or "ST" or "Abbrev" column; handle robustly
+      const stateAbbrev =
+        normalizeStateAbbrev(raw.State) ||
+        normalizeStateAbbrev(raw.STATE) ||
+        normalizeStateAbbrev(raw.ST) ||
+        normalizeStateAbbrev(raw.STUSPS) ||
+        normalizeStateAbbrev(raw.Abbrev) ||
+        normalizeStateAbbrev(raw.ABBR);
+
+      if (!stateAbbrev) continue;
+
+      const row = {};
+      for (const k of Object.keys(raw)) {
+        if (!k) continue;
+        row[k.trim()] = (raw[k] ?? "").toString().trim();
+      }
+
+      if (!rowsByState.has(stateAbbrev)) rowsByState.set(stateAbbrev, []);
+      rowsByState.get(stateAbbrev).push(row);
+      rowCount++;
+    }
+
+    console.log("Loaded state agency rows:", rowCount);
   }
 
   // =========================
@@ -532,12 +614,21 @@
     return false;
   }
 
-  function updateAllModeFromSelected() {
-    allMode = (selectedFilters.size === FILTERS.length);
+  // =========================
+  // PANELS TOGGLE
+  // =========================
+  function setPanelsForMode() {
+    const countyPanel = document.getElementById("countyPanel");
+    const statePanel  = document.getElementById("statePanel");
+    const hint = document.getElementById("modeHint");
+
+    countyPanel.style.display = stateMode ? "none" : "block";
+    statePanel.style.display  = stateMode ? "block" : "none";
+    hint.style.display = stateMode ? "block" : "none";
   }
 
   // =========================
-  // SIDEBAR + POPUP
+  // COUNTY RENDER
   // =========================
   function renderCountyInfo(props) {
     const countyNameEl = document.getElementById("county-name");
@@ -602,13 +693,10 @@
     }
 
     const agency = row["Law_Enforcement_Agency_Name"] || "Unknown agency";
-
-    const xVal  = hasValid(row["X_band"])  ? formatMulti(row["X_band"])  : "";
     const kaVal = hasValid(row["Ka_band"]) ? formatMulti(row["Ka_band"]) : "";
     const kVal  = hasValid(row["K_band"])  ? formatMulti(row["K_band"])  : "";
+    const xVal  = hasValid(row["X_band"])  ? formatMulti(row["X_band"])  : "";
     const lidar = hasValid(row["Lidar_Guns"]) ? formatMulti(row["Lidar_Guns"]) : "";
-    const tactics = hasValid(row["Special_Tactics"]) ? row["Special_Tactics"] : "";
-    const flags = flagsHtmlFromRow(row);
 
     let bandsHtml = "";
     if (xVal || kaVal || kVal) {
@@ -624,10 +712,68 @@
         <div><strong>Main agency:</strong> ${agency}</div>
         ${bandsHtml ? `<div style="margin-top:6px;">${bandsHtml}</div>` : ""}
         ${lidar ? `<div style="margin-top:6px;"><strong>Lidar:</strong><br>${lidar}</div>` : ""}
-        ${flags ? `${flags}` : ""}
-        ${tactics ? `<div style="margin-top:6px;"><strong>Special tactics:</strong><br>${tactics}</div>` : ""}
       </div>
     `;
+  }
+
+  // =========================
+  // STATE AGENCY RENDER
+  // =========================
+  function renderStateInfo(stateAbbrev) {
+    const stateNameEl = document.getElementById("state-name");
+    const stateRecordsEl = document.getElementById("state-records");
+
+    const fullName = STATE_NAME_MAP[stateAbbrev] || stateAbbrev || "Unknown";
+    stateNameEl.textContent = `${fullName} (${stateAbbrev})`;
+    stateRecordsEl.innerHTML = "";
+
+    const rows = rowsByState.get(stateAbbrev) || [];
+    if (rows.length === 0) {
+      stateRecordsEl.innerHTML = "<p>No state agency data for this state yet.</p>";
+      return;
+    }
+
+    rows.forEach((row, idx) => {
+      const agency =
+        row["Law_Enforcement_Agency_Name"] ||
+        row["Agency"] ||
+        row["Agency_Name"] ||
+        row["Name"] ||
+        "Unknown agency";
+
+      // If the state CSV uses similar columns, show them nicely:
+      const xVal  = hasValid(row["X_band"])  ? formatMulti(row["X_band"])  : "";
+      const kaVal = hasValid(row["Ka_band"]) ? formatMulti(row["Ka_band"]) : "";
+      const kVal  = hasValid(row["K_band"])  ? formatMulti(row["K_band"])  : "";
+      const lidar = hasValid(row["Lidar_Guns"]) ? formatMulti(row["Lidar_Guns"]) : "";
+      const tactics = hasValid(row["Special_Tactics"]) ? row["Special_Tactics"] : "";
+      const notes = hasValid(row["Notes"]) ? row["Notes"] : "";
+
+      let bandsHtml = "";
+      if (xVal || kaVal || kVal) {
+        bandsHtml += `<div><strong>Bands</strong></div>`;
+        if (xVal)  bandsHtml += `<div>- <strong>X:</strong><br>${xVal}</div>`;
+        if (kaVal) bandsHtml += `<div style="margin-top:4px;">- <strong>Ka:</strong><br>${kaVal}</div>`;
+        if (kVal)  bandsHtml += `<div style="margin-top:4px;">- <strong>K:</strong><br>${kVal}</div>`;
+      }
+
+      const div = document.createElement("div");
+      div.className = "record";
+      div.innerHTML = `
+        <div class="record-header">${idx + 1}. ${agency}</div>
+        ${bandsHtml}
+        ${lidar ? `<div style="margin-top:6px;"><strong>Lidar:</strong><br>${lidar}</div>` : ""}
+        ${tactics ? `<div style="margin-top:6px;"><strong>Special tactics:</strong><br>${tactics}</div>` : ""}
+        ${notes ? `<div style="margin-top:6px;"><strong>Notes:</strong><br>${notes}</div>` : ""}
+      `;
+      stateRecordsEl.appendChild(div);
+    });
+  }
+
+  function statePopupHtml(stateName, ab) {
+    const rows = rowsByState.get(ab) || [];
+    const count = rows.length;
+    return `<strong>${stateName} (${ab})</strong><br>${count} state record${count === 1 ? "" : "s"} found.`;
   }
 
   // =========================
@@ -676,7 +822,6 @@
     if (matches.length === 0) return s;
 
     const colorMap = { x:"gold", k:"orange", ka:"blue", lidar:"red", de:"purple" };
-
     if (matches.length === 1) {
       s.fillColor = colorMap[matches[0]] || "green";
       s.fillOpacity = 0.50;
@@ -690,7 +835,7 @@
   }
 
   // =========================
-  // BUILD VECTORGRID
+  // BUILD VECTORGRID (COUNTIES)
   // =========================
   async function rebuildLayer() {
     if (!geojsonCache) return;
@@ -706,16 +851,13 @@
       tolerance: 3,
       extent: 4096,
       buffer: 256,
-
       rendererFactory: L.svg.tile,
       pane: "countiesPane",
       interactive: true,
-
       getFeatureId: f => {
         const p = (f && f.properties) ? f.properties : {};
         return normalizeGeoid(p.GEOID || p.geoid || p.GEOID10 || p.GEO_ID || "");
       },
-
       vectorTileLayerStyles: {
         sliced: props => styleForProps(props)
       }
@@ -725,6 +867,9 @@
 
     vgLayer.on("click", (e) => {
       try {
+        // If State Mode is on, ignore county clicks.
+        if (stateMode) return;
+
         const props =
           (e && e.layer && e.layer.properties) ? e.layer.properties :
           (e && e.properties) ? e.properties :
@@ -757,22 +902,29 @@
   }
 
   // =========================
+  // KA DROPDOWN OPEN/CLOSE
+  // =========================
+  function setKaDropdown(open) {
+    document.getElementById("kaDropdown").classList.toggle("open", !!open);
+  }
+  function isKaDropdownOpen() {
+    return document.getElementById("kaDropdown").classList.contains("open");
+  }
+
+  // =========================
   // FILTER BUTTON UI
   // =========================
   function setButtonActive(btn, on) { btn.classList.toggle("active", !!on); }
-  function setButtonDisabled(btn, on) {
-    btn.classList.toggle("disabled", !!on);
-    btn.disabled = !!on;
-  }
+  function setButtonDisabled(btn, on) { btn.classList.toggle("disabled", !!on); btn.disabled = !!on; }
 
   function renderFilterButtons() {
-    const kaArrowBtn = document.getElementById("kaArrowBtn");
+    const stateBtn = document.getElementById("stateModeBtn");
+    setButtonActive(stateBtn, stateMode);
 
     document.querySelectorAll(".filter-btn[data-filter]").forEach(btn => {
       const f = btn.getAttribute("data-filter");
 
       if (kaFreqMode) {
-        // Ka freq mode: Ka-only, lock normal filters
         setButtonActive(btn, f === "ka");
         setButtonDisabled(btn, true);
       } else {
@@ -782,36 +934,121 @@
       }
     });
 
-    // Ka arrow stays usable even in Ka freq mode
+    const kaArrowBtn = document.getElementById("kaArrowBtn");
     kaArrowBtn.classList.toggle("active", kaFreqMode);
-    kaArrowBtn.classList.toggle("disabled", false);
     kaArrowBtn.disabled = false;
-  }
-
-  function updateAllModeFromSelected() {
-    allMode = (selectedFilters.size === FILTERS.length);
+    kaArrowBtn.classList.remove("disabled");
   }
 
   // =========================
-  // KA DROPDOWN OPEN/CLOSE
+  // STATE LAYER (CLICKABLE)
   // =========================
-  function setKaDropdown(open) {
-    const dd = document.getElementById("kaDropdown");
-    dd.classList.toggle("open", !!open);
+  async function addStateBordersAndClickableStates() {
+    const res = await fetch(STATE_BORDERS_URL);
+    if (!res.ok) throw new Error("StateBorders fetch failed: " + res.status);
+    const statesGeo = await res.json();
+
+    map.createPane("statesPane");
+    map.getPane("statesPane").style.zIndex = 690;   // above counties, below popups
+    map.getPane("popupPane").style.zIndex = 900;    // popups always on top
+
+    // Remove existing if present
+    if (statesLayer) {
+      map.removeLayer(statesLayer);
+      statesLayer = null;
+    }
+
+    statesLayer = L.geoJSON(statesGeo, {
+      pane: "statesPane",
+      // Always add, but we will toggle interactivity via setStateMode()
+      interactive: true,
+      style: (feature) => ({
+        color: "#000",
+        weight: 4,
+        opacity: 0.9,
+        fill: true,          // IMPORTANT: clickable area
+        fillOpacity: 0.00    // invisible fill
+      }),
+      onEachFeature: (feature, layer) => {
+        layer.on("click", (e) => {
+          if (!stateMode) return;
+
+          const p = (feature && feature.properties) ? feature.properties : {};
+          const ab = getStateAbbrevFromProps(p);
+          if (!ab) return;
+
+          lastClickedStateAbbrev = ab;
+
+          const stateName = getStateNameFromProps(p, ab);
+
+          renderStateInfo(ab);
+
+          L.popup()
+            .setLatLng(e.latlng)
+            .setContent(statePopupHtml(stateName, ab))
+            .openOn(map);
+        });
+      }
+    }).addTo(map);
+
+    setStateMode(stateMode); // apply initial interactivity state
   }
 
-  function isKaDropdownOpen() {
-    return document.getElementById("kaDropdown").classList.contains("open");
+  function setStateMode(on) {
+    stateMode = !!on;
+
+    // Make the state layer actually clickable only in state mode
+    if (statesLayer) {
+      statesLayer.eachLayer(layer => {
+        if (stateMode) {
+          layer.options.interactive = true;
+          if (layer.getElement) {
+            const el = layer.getElement();
+            if (el) el.style.pointerEvents = "auto";
+          }
+        } else {
+          layer.options.interactive = false;
+          if (layer.getElement) {
+            const el = layer.getElement();
+            if (el) el.style.pointerEvents = "none";
+          }
+        }
+      });
+    }
+
+    // Also close Ka dropdown if open
+    setKaDropdown(false);
+
+    // Switch panels
+    setPanelsForMode();
+
+    // If turning on state mode, clear county selection popup expectation
+    if (stateMode) {
+      // keep map shading as-is; just change click behavior
+      // show last selected state if available
+      if (lastClickedStateAbbrev) renderStateInfo(lastClickedStateAbbrev);
+      else {
+        document.getElementById("state-name").textContent = "None selected";
+        document.getElementById("state-records").innerHTML = "";
+      }
+    }
+
+    renderFilterButtons();
   }
 
   // =========================
   // INIT FILTERS
   // =========================
   function initFilters() {
+    // State mode toggle button
+    document.getElementById("stateModeBtn").addEventListener("click", () => {
+      setStateMode(!stateMode);
+    });
+
     // Normal filter buttons
     document.querySelectorAll(".filter-btn[data-filter]").forEach(btn => {
       btn.addEventListener("click", async () => {
-        if (kaFreqMode) return; // locked in Ka freq mode
+        if (kaFreqMode) return;
 
         const f = btn.getAttribute("data-filter");
 
@@ -824,57 +1061,51 @@
           if (selectedFilters.has(f)) selectedFilters.delete(f);
           else selectedFilters.add(f);
 
-          updateAllModeFromSelected();
+          allMode = (selectedFilters.size === FILTERS.length);
           if (allMode) selectedFilters = new Set(FILTERS);
         }
 
         renderFilterButtons();
         await rebuildLayer();
-        if (lastClickedProps) renderCountyInfo(lastClickedProps);
+        if (lastClickedProps && !stateMode) renderCountyInfo(lastClickedProps);
       });
     });
 
-    // Ka arrow toggles dropdown visibility
+    // Ka arrow opens dropdown
     document.getElementById("kaArrowBtn").addEventListener("click", (e) => {
       e.stopPropagation();
       setKaDropdown(!isKaDropdownOpen());
     });
 
-    // Selecting a Ka freq option turns Ka freq mode on/off
+    // Ka dropdown selection enables/disables Ka freq mode
     document.getElementById("kaFreqSelect").addEventListener("change", async (e) => {
       const val = e.target.value;
 
       if (val === "off") {
-        // disable freq mode, restore normal filters
         if (kaFreqMode) {
           kaFreqMode = false;
           allMode = savedAllMode;
           selectedFilters = new Set(savedSelectedFilters);
         }
       } else {
-        // enable freq mode
         if (!kaFreqMode) {
           savedAllMode = allMode;
           savedSelectedFilters = new Set(selectedFilters);
         }
 
         kaFreqMode = true;
-        kaFreqChoice = val; // any / 33.8 / 34.7 / 35.5
+        kaFreqChoice = val;
 
-        // force Ka-only behavior (display-wise)
         allMode = false;
         selectedFilters = new Set(["ka"]);
       }
 
       renderFilterButtons();
       await rebuildLayer();
-      if (lastClickedProps) renderCountyInfo(lastClickedProps);
-
-      // keep dropdown open after change? (you can close it if you want)
-      // setKaDropdown(false);
+      if (lastClickedProps && !stateMode) renderCountyInfo(lastClickedProps);
     });
 
-    // Close dropdown when clicking outside
+    // close Ka dropdown on outside click
     document.addEventListener("click", (e) => {
       const wrap = document.getElementById("kaSplit");
       if (!wrap.contains(e.target)) setKaDropdown(false);
@@ -884,33 +1115,14 @@
   }
 
   // =========================
-  // STATE BORDERS
-  // =========================
-  async function addStateBorders() {
-    const res = await fetch(STATE_BORDERS_URL);
-    if (!res.ok) throw new Error("StateBorders fetch failed: " + res.status);
-    const statesGeo = await res.json();
-
-    map.createPane("statesPane");
-    map.getPane("statesPane").style.zIndex = 690;
-    map.getPane("popupPane").style.zIndex = 900;
-
-    L.geoJSON(statesGeo, {
-      pane: "statesPane",
-      interactive: false,
-      style: { color: "#000", weight: 4, opacity: 0.9, fill: false }
-    }).addTo(map);
-  }
-
-  // =========================
   // BOOTSTRAP
   // =========================
   async function bootstrap() {
     try {
       setStatus("Loading CSV data…");
-      await loadCsv();
+      await Promise.all([loadCountyCsv(), loadStateAgencyCsv()]);
 
-      setStatus("Loading county shapes…");
+      setStatus("Loading shapes…");
       const geoRes = await fetch(GEOJSON_URL);
       if (!geoRes.ok) throw new Error("GeoJSON fetch failed: " + geoRes.status);
       geojsonCache = await geoRes.json();
@@ -926,15 +1138,16 @@
       map.getPane("countiesPane").style.zIndex = 650;
 
       setStatus("Loading state borders…");
-      await addStateBorders();
+      await addStateBordersAndClickableStates();
 
       setTimeout(() => map.invalidateSize(), 0);
       window.addEventListener("resize", () => map.invalidateSize());
 
       initFilters();
       await rebuildLayer();
+      setPanelsForMode();
 
-      setStatus("Data loaded. Click a county.");
+      setStatus("Data loaded. Click a county, or toggle State mode to click states.");
     } catch (err) {
       console.error(err);
       setStatus("Error loading data. Open console for details.");
