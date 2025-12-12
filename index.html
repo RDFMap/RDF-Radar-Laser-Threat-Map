@@ -262,11 +262,17 @@
     return `<div class="flagline">${lines.map(l => `<div>${l}</div>`).join("")}</div>`;
   }
 
+  // IMPORTANT CHANGE:
+  // A row "counts" as data if it has ANY of: K OR Ka OR Lidar.
+  // (Plus: flags Y or Special_Tactics can also count as meaningful.)
   function rowHasAnyContent(row) {
-    if (hasValid(row["X_band"])) return true;
-    if (hasValid(row["K_band"])) return true;
-    if (hasValid(row["Ka_band"])) return true;
-    if (hasValid(row["Lidar_Guns"])) return true;
+    const core =
+      hasValid(row["K_band"]) ||
+      hasValid(row["Ka_band"]) ||
+      hasValid(row["Lidar_Guns"]);
+
+    if (core) return true;
+
     if (hasValid(row["Special_Tactics"])) return true;
 
     if (isYes(getField(row, "Overpass_shots", "Overpass shots", "Overpass"))) return true;
@@ -352,7 +358,9 @@
   // FILTERING FOR UI
   // =========================
   function passesCurrentFilters(row) {
-    if (allMode) return true;
+    // CHANGE: even in ALL mode, only show rows that actually have meaningful content
+    if (allMode) return rowHasAnyContent(row);
+
     if (selectedFilters.size === 0) return false;
 
     for (const f of selectedFilters) {
@@ -395,9 +403,7 @@
     const filtered = all.filter(passesCurrentFilters);
 
     if (filtered.length === 0) {
-      recordsEl.innerHTML = allMode
-        ? "<p>No data for this county yet.</p>"
-        : "<p>No data for this county for the selected filters.</p>";
+      recordsEl.innerHTML = "<p>No data for this county yet.</p>";
       return;
     }
 
@@ -490,7 +496,7 @@
 
     if (!geoid) return s;
 
-    // ALL mode: green if any meaningful data exists in this county (gray if none)
+    // ALL mode: dark green if any meaningful data exists in this county
     if (allMode) {
       if (hasAnyData.has(geoid)) {
         s.fillColor = "#0B6623";
@@ -608,11 +614,9 @@
         const f = btn.getAttribute("data-filter");
 
         if (f === "all") {
-          // clicking All forces everything on
           allMode = true;
           selectedFilters = new Set(FILTERS);
         } else {
-          // leaving All mode as soon as user customizes
           if (allMode) allMode = false;
 
           if (selectedFilters.has(f)) selectedFilters.delete(f);
@@ -629,7 +633,6 @@
       });
     });
 
-    // initial render
     renderFilterButtons();
   }
 
@@ -667,7 +670,7 @@
 
       setStatus("Loading county shapes…");
       const geoRes = await fetch(GEOJSON_URL);
-      if (!geoRes.ok) throw new Error("GeoJSON fetch failed: " + geoRes.status);
+      if (!geoRes.ok) throw new Error("GeoJSON fetch failed: " + res.status);
       geojsonCache = await geoRes.json();
 
       map = L.map("map").setView(DEFAULT_CENTER, DEFAULT_ZOOM);
