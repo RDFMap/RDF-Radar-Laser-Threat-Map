@@ -19,7 +19,7 @@
 
     #sidebar {
       flex: 1;
-      max-width: 420px;
+      max-width: 440px;
       border-left: 1px solid #ddd;
       padding: 12px 16px;
       box-sizing: border-box;
@@ -32,17 +32,44 @@
     #county-name { font-weight: 700; }
 
     .filters { margin: 10px 0; }
+    .filters-title { font-size:13px; font-weight:600; margin-bottom: 6px; }
+
+    .filter-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
     .filter-btn {
-      display: inline-block;
-      margin: 2px 6px 2px 0;
-      padding: 5px 10px;
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-width: 60px;
+      padding: 6px 10px 5px;
       font-size: 12px;
-      border-radius: 5px;
+      border-radius: 8px;
       border: 1px solid #ccc;
       background: #f7f7f7;
       cursor: pointer;
+      user-select: none;
+      line-height: 1.1;
     }
-    .filter-btn.active { background: #333; color: #fff; border-color: #333; }
+
+    .filter-btn .tick {
+      margin-top: 4px;
+      font-size: 14px;
+      line-height: 14px;
+      visibility: hidden;
+    }
+
+    .filter-btn.active {
+      background: #333;
+      color: #fff;
+      border-color: #333;
+    }
+    .filter-btn.active .tick { visibility: visible; }
 
     .record {
       border: 1px solid #eee;
@@ -66,13 +93,34 @@
     <h1>Enforcement Map</h1>
     <div id="status">Loading…</div>
 
+    <!-- TOGGLE BUTTON FILTERS -->
     <div class="filters">
-      <span style="font-size:13px; margin-right:6px;">Filter:</span>
-      <button class="filter-btn active" data-filter="all">All</button>
-      <button class="filter-btn" data-filter="k">K</button>
-      <button class="filter-btn" data-filter="ka">Ka</button>
-      <button class="filter-btn" data-filter="lidar">Lidar</button>
-      <button class="filter-btn" data-filter="de">DE</button>
+      <div class="filters-title">Filters (multi-select):</div>
+      <div class="filter-bar">
+        <button class="filter-btn active" data-filter="all" type="button">
+          <div>All</div><div class="tick">✅</div>
+        </button>
+
+        <button class="filter-btn active" data-filter="x" type="button">
+          <div>X</div><div class="tick">✅</div>
+        </button>
+
+        <button class="filter-btn active" data-filter="k" type="button">
+          <div>K</div><div class="tick">✅</div>
+        </button>
+
+        <button class="filter-btn active" data-filter="ka" type="button">
+          <div>Ka</div><div class="tick">✅</div>
+        </button>
+
+        <button class="filter-btn active" data-filter="lidar" type="button">
+          <div>Lidar</div><div class="tick">✅</div>
+        </button>
+
+        <button class="filter-btn active" data-filter="de" type="button">
+          <div>DE</div><div class="tick">✅</div>
+        </button>
+      </div>
     </div>
 
     <h2>Selected County</h2>
@@ -105,18 +153,27 @@
   const DEFAULT_CENTER = [39.5, -98.35];
   const DEFAULT_ZOOM = 4;
 
+  const FILTERS = ["x", "k", "ka", "lidar", "de"]; // order matters for priority/coloring
+
   // =========================
   // STATE
   // =========================
   let map, vgLayer, geojsonCache;
-  let activeFilter = "all";
   let selectedId = null;
+  let lastClickedProps = null;
+
+  // “All” mode means: behave like before (everything selected)
+  let allMode = true;
+  let selectedFilters = new Set(FILTERS);
 
   const rowsByGeoid = new Map();
+
+  const hasX = new Set();
   const hasK = new Set();
   const hasKa = new Set();
   const hasLidar = new Set();
   const hasDE = new Set();
+  const hasAnyData = new Set(); // ALL mode -> green if any content
 
   // =========================
   // HELPERS
@@ -138,11 +195,10 @@
   }
 
   function getField(row, ...keys) {
-    // grab a value from a row where headers might be slightly different / messy
     for (const k of keys) {
       if (!k) continue;
       if (row[k] !== undefined) return row[k];
-      // try normalized compare
+
       const target = String(k).trim().toLowerCase().replace(/\s+/g, " ");
       for (const rk of Object.keys(row)) {
         const norm = String(rk).trim().toLowerCase().replace(/\s+/g, " ");
@@ -154,6 +210,7 @@
 
   function containsDE(val) {
     if (!hasValid(val)) return false;
+    // DETC / DESL / DE / DE-FOO etc.
     return /\bDE[A-Z0-9_-]*\b/i.test(String(val));
   }
 
@@ -205,6 +262,38 @@
     return `<div class="flagline">${lines.map(l => `<div>${l}</div>`).join("")}</div>`;
   }
 
+  function rowHasAnyContent(row) {
+    if (hasValid(row["X_band"])) return true;
+    if (hasValid(row["K_band"])) return true;
+    if (hasValid(row["Ka_band"])) return true;
+    if (hasValid(row["Lidar_Guns"])) return true;
+    if (hasValid(row["Special_Tactics"])) return true;
+
+    if (isYes(getField(row, "Overpass_shots", "Overpass shots", "Overpass"))) return true;
+    if (isYes(getField(row, "Rear_shots", "Rear shots", "Rear"))) return true;
+    if (isYes(getField(row, "Ghost or Unmarked Unit", "Ghost/Unmarked", "Ghost", "Unmarked Unit"))) return true;
+
+    return false;
+  }
+
+  function rowMatchesFilter(row, f) {
+    if (f === "x") return hasValid(row["X_band"]);
+    if (f === "k") return hasValid(row["K_band"]);
+    if (f === "ka") return hasValid(row["Ka_band"]);
+    if (f === "lidar") return hasValid(row["Lidar_Guns"]);
+    if (f === "de") return containsDE(row["Lidar_Guns"]);
+    return false;
+  }
+
+  function countyMatchesFilterSet(geoid, f) {
+    if (f === "x") return hasX.has(geoid);
+    if (f === "k") return hasK.has(geoid);
+    if (f === "ka") return hasKa.has(geoid);
+    if (f === "lidar") return hasLidar.has(geoid);
+    if (f === "de") return hasDE.has(geoid);
+    return false;
+  }
+
   // =========================
   // LOAD CSV
   // =========================
@@ -219,10 +308,13 @@
     });
 
     rowsByGeoid.clear();
+
+    hasX.clear();
     hasK.clear();
     hasKa.clear();
     hasLidar.clear();
     hasDE.clear();
+    hasAnyData.clear();
 
     let validRowCount = 0;
 
@@ -243,14 +335,46 @@
       if (!rowsByGeoid.has(geoid)) rowsByGeoid.set(geoid, []);
       rowsByGeoid.get(geoid).push(row);
 
+      if (hasValid(row["X_band"])) hasX.add(geoid);
       if (hasValid(row["K_band"])) hasK.add(geoid);
       if (hasValid(row["Ka_band"])) hasKa.add(geoid);
 
       if (hasValid(row["Lidar_Guns"])) hasLidar.add(geoid);
       if (containsDE(row["Lidar_Guns"])) hasDE.add(geoid);
+
+      if (rowHasAnyContent(row)) hasAnyData.add(geoid);
     }
 
     console.log("Loaded valid county rows:", validRowCount);
+  }
+
+  // =========================
+  // FILTERING FOR UI
+  // =========================
+  function passesCurrentFilters(row) {
+    if (allMode) return true;
+    if (selectedFilters.size === 0) return false;
+
+    for (const f of selectedFilters) {
+      if (rowMatchesFilter(row, f)) return true;
+    }
+    return false;
+  }
+
+  function updateAllModeFromSelected() {
+    allMode = (selectedFilters.size === FILTERS.length);
+  }
+
+  function renderFilterButtons() {
+    const btns = document.querySelectorAll(".filter-btn");
+    btns.forEach(btn => {
+      const f = btn.getAttribute("data-filter");
+      if (f === "all") {
+        btn.classList.toggle("active", allMode);
+      } else {
+        btn.classList.toggle("active", allMode || selectedFilters.has(f));
+      }
+    });
   }
 
   // =========================
@@ -268,39 +392,32 @@
     recordsEl.innerHTML = "";
 
     const all = rowsByGeoid.get(geoid) || [];
-
-    const filtered = all.filter(row => {
-      if (activeFilter === "k") return hasValid(row["K_band"]);
-      if (activeFilter === "ka") return hasValid(row["Ka_band"]);
-      if (activeFilter === "lidar") return hasValid(row["Lidar_Guns"]);
-      if (activeFilter === "de") return containsDE(row["Lidar_Guns"]);
-      return true;
-    });
+    const filtered = all.filter(passesCurrentFilters);
 
     if (filtered.length === 0) {
-      recordsEl.innerHTML =
-        activeFilter === "all"
-          ? "<p>No data for this county yet.</p>"
-          : `<p>No data for this county for current filter (${activeFilter.toUpperCase()}).</p>`;
+      recordsEl.innerHTML = allMode
+        ? "<p>No data for this county yet.</p>"
+        : "<p>No data for this county for the selected filters.</p>";
       return;
     }
 
     filtered.forEach((row, idx) => {
       const agency = row["Law_Enforcement_Agency_Name"] || "Unknown agency";
 
+      const xVal  = hasValid(row["X_band"])  ? formatMulti(row["X_band"])  : "";
       const kaVal = hasValid(row["Ka_band"]) ? formatMulti(row["Ka_band"]) : "";
       const kVal  = hasValid(row["K_band"])  ? formatMulti(row["K_band"])  : "";
       const lidar = hasValid(row["Lidar_Guns"]) ? formatMulti(row["Lidar_Guns"]) : "";
       const tactics = hasValid(row["Special_Tactics"]) ? row["Special_Tactics"] : "";
+      const flags = flagsHtmlFromRow(row);
 
       let bandsHtml = "";
-      if (kaVal || kVal) {
+      if (xVal || kaVal || kVal) {
         bandsHtml += `<div><strong>Bands</strong></div>`;
-        if (kaVal) bandsHtml += `<div>- <strong>Ka:</strong><br>${kaVal}</div>`;
+        if (xVal)  bandsHtml += `<div>- <strong>X:</strong><br>${xVal}</div>`;
+        if (kaVal) bandsHtml += `<div style="margin-top:4px;">- <strong>Ka:</strong><br>${kaVal}</div>`;
         if (kVal)  bandsHtml += `<div style="margin-top:4px;">- <strong>K:</strong><br>${kVal}</div>`;
       }
-
-      const flags = flagsHtmlFromRow(row);
 
       const div = document.createElement("div");
       div.className = "record";
@@ -321,19 +438,15 @@
     const geoid = normalizeGeoid(props.GEOID || props.geoid || props.GEOID10 || props.GEO_ID || "");
 
     const all = rowsByGeoid.get(geoid) || [];
-    const row = all.find(r => {
-      if (activeFilter === "k") return hasValid(r["K_band"]);
-      if (activeFilter === "ka") return hasValid(r["Ka_band"]);
-      if (activeFilter === "lidar") return hasValid(r["Lidar_Guns"]);
-      if (activeFilter === "de") return containsDE(r["Lidar_Guns"]);
-      return true;
-    });
+    const row = all.find(passesCurrentFilters);
 
     if (!row) {
-      return `<strong>${st ? `${name}, ${st}` : name}</strong><br>No data for current filter.`;
+      return `<strong>${st ? `${name}, ${st}` : name}</strong><br>No data for the selected filters.`;
     }
 
     const agency = row["Law_Enforcement_Agency_Name"] || "Unknown agency";
+
+    const xVal  = hasValid(row["X_band"])  ? formatMulti(row["X_band"])  : "";
     const kaVal = hasValid(row["Ka_band"]) ? formatMulti(row["Ka_band"]) : "";
     const kVal  = hasValid(row["K_band"])  ? formatMulti(row["K_band"])  : "";
     const lidar = hasValid(row["Lidar_Guns"]) ? formatMulti(row["Lidar_Guns"]) : "";
@@ -341,9 +454,10 @@
     const flags = flagsHtmlFromRow(row);
 
     let bandsHtml = "";
-    if (kaVal || kVal) {
+    if (xVal || kaVal || kVal) {
       bandsHtml += `<div><strong>Bands</strong></div>`;
-      if (kaVal) bandsHtml += `<div>- <strong>Ka:</strong><br>${kaVal}</div>`;
+      if (xVal)  bandsHtml += `<div>- <strong>X:</strong><br>${xVal}</div>`;
+      if (kaVal) bandsHtml += `<div style="margin-top:4px;">- <strong>Ka:</strong><br>${kaVal}</div>`;
       if (kVal)  bandsHtml += `<div style="margin-top:4px;">- <strong>K:</strong><br>${kVal}</div>`;
     }
 
@@ -376,16 +490,43 @@
 
     if (!geoid) return s;
 
-    if (activeFilter === "ka" && hasKa.has(geoid)) {
-      s.fillColor = "blue"; s.fillOpacity = 0.5;
-    } else if (activeFilter === "k" && hasK.has(geoid)) {
-      s.fillColor = "orange"; s.fillOpacity = 0.5;
-    } else if (activeFilter === "lidar" && hasLidar.has(geoid)) {
-      s.fillColor = "red"; s.fillOpacity = 0.5;
-    } else if (activeFilter === "de" && hasDE.has(geoid)) {
-      s.fillColor = "purple"; s.fillOpacity = 0.5;
+    // ALL mode: green if any meaningful data exists in this county (gray if none)
+    if (allMode) {
+      if (hasAnyData.has(geoid)) {
+        s.fillColor = "green";
+        s.fillOpacity = 0.35;
+      }
+      return s;
     }
 
+    if (selectedFilters.size === 0) return s;
+
+    const matches = [];
+    for (const f of FILTERS) {
+      if (!selectedFilters.has(f)) continue;
+      if (countyMatchesFilterSet(geoid, f)) matches.push(f);
+    }
+
+    if (matches.length === 0) return s;
+
+    const colorMap = {
+      x: "gold",
+      k: "orange",
+      ka: "blue",
+      lidar: "red",
+      de: "purple"
+    };
+
+    if (matches.length === 1) {
+      s.fillColor = colorMap[matches[0]] || "green";
+      s.fillOpacity = 0.50;
+      return s;
+    }
+
+    // multi-match: distinct color so it’s obvious it matched more than one
+    s.fillColor = "cyan";
+    s.fillOpacity = 0.55;
+    s.weight = 2.0;
     return s;
   }
 
@@ -430,6 +571,8 @@
           (e && e.properties) ? e.properties :
           {};
 
+        lastClickedProps = props;
+
         const geoid = normalizeGeoid(props.GEOID || props.geoid || props.GEOID10 || props.GEO_ID || "");
 
         if (selectedId) vgLayer.resetFeatureStyle(selectedId);
@@ -455,20 +598,39 @@
   }
 
   // =========================
-  // FILTER BUTTONS
+  // FILTER BUTTONS (MULTI-SELECT)
   // =========================
   function initFilters() {
-    const buttons = document.querySelectorAll(".filter-btn");
-    buttons.forEach(btn => {
+    const btns = document.querySelectorAll(".filter-btn");
+
+    btns.forEach(btn => {
       btn.addEventListener("click", async () => {
-        activeFilter = btn.getAttribute("data-filter");
+        const f = btn.getAttribute("data-filter");
 
-        buttons.forEach(b => b.classList.remove("active"));
-        btn.classList.add("active");
+        if (f === "all") {
+          // clicking All forces everything on
+          allMode = true;
+          selectedFilters = new Set(FILTERS);
+        } else {
+          // leaving All mode as soon as user customizes
+          if (allMode) allMode = false;
 
+          if (selectedFilters.has(f)) selectedFilters.delete(f);
+          else selectedFilters.add(f);
+
+          updateAllModeFromSelected();
+          if (allMode) selectedFilters = new Set(FILTERS);
+        }
+
+        renderFilterButtons();
         await rebuildLayer();
+
+        if (lastClickedProps) renderCountyInfo(lastClickedProps);
       });
     });
+
+    // initial render
+    renderFilterButtons();
   }
 
   // =========================
