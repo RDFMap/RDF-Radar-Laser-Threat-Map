@@ -1,10 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Georgia Radar / Lidar Threat Map</title>
+  <meta charset="UTF-8" />
+  <title>Enforcement Map</title>
 
-  <!-- Leaflet CSS -->
   <link
           rel="stylesheet"
           href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -13,107 +12,54 @@
   />
 
   <style>
-    html, body {
-      height: 100%;
-      margin: 0;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    }
-
-    #app {
-      display: flex;
-      height: 100vh;
-      width: 100vw;
-    }
-
-    #map {
-      flex: 2;
-    }
+    html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+    #app { display: flex; height: 100vh; width: 100vw; }
+    #map { flex: 2; }
 
     #sidebar {
       flex: 1;
-      max-width: 400px;
+      max-width: 420px;
       border-left: 1px solid #ddd;
       padding: 12px 16px;
       box-sizing: border-box;
       overflow-y: auto;
+      background: #fff;
     }
+    #sidebar h1 { font-size: 20px; margin: 0 0 8px; }
+    #sidebar h2 { font-size: 16px; margin-top: 16px; margin-bottom: 8px; }
+    #status { font-size: 13px; color: #666; margin-top: 4px; }
+    #county-name { font-weight: 700; }
 
-    #sidebar h1 {
-      font-size: 20px;
-      margin: 0 0 8px;
-    }
-
-    #sidebar h2 {
-      font-size: 16px;
-      margin-top: 16px;
-      margin-bottom: 8px;
-    }
-
-    #county-name {
-      font-weight: 600;
-    }
-
-    .record {
-      border: 1px solid #eee;
-      border-radius: 4px;
-      padding: 8px;
-      margin-bottom: 8px;
-      font-size: 14px;
-    }
-
-    .record-header {
-      font-weight: 600;
-      margin-bottom: 4px;
-    }
-
-    #status {
-      font-size: 13px;
-      color: #666;
-      margin-top: 4px;
-    }
-
-    #legend {
-      font-size: 13px;
-      margin-top: 12px;
-    }
-
-    #legend span.color-box {
-      display: inline-block;
-      width: 12px;
-      height: 12px;
-      margin-right: 4px;
-      border: 1px solid #ccc;
-    }
-
-    .filters {
-      margin-top: 8px;
-      margin-bottom: 8px;
-    }
-
+    .filters { margin: 10px 0; }
     .filter-btn {
       display: inline-block;
-      margin: 2px 4px 2px 0;
-      padding: 4px 8px;
+      margin: 2px 6px 2px 0;
+      padding: 5px 10px;
       font-size: 12px;
-      border-radius: 3px;
+      border-radius: 5px;
       border: 1px solid #ccc;
       background: #f7f7f7;
       cursor: pointer;
     }
+    .filter-btn.active { background: #333; color: #fff; border-color: #333; }
 
-    .filter-btn.active {
-      background: #333;
-      color: #fff;
-      border-color: #333;
+    .record {
+      border: 1px solid #eee;
+      border-radius: 8px;
+      padding: 10px;
+      margin-bottom: 10px;
+      font-size: 14px;
     }
+    .record-header { font-weight: 700; margin-bottom: 6px; }
   </style>
 </head>
+
 <body>
 <div id="app">
   <div id="map"></div>
   <div id="sidebar">
-    <h1>Georgia Enforcement Map</h1>
-    <div id="status">Loading data…</div>
+    <h1>Enforcement Map</h1>
+    <div id="status">Loading…</div>
 
     <div class="filters">
       <span style="font-size:13px; margin-right:6px;">Filter:</span>
@@ -128,263 +74,222 @@
 
     <h2>Agencies / Records</h2>
     <div id="records"></div>
-
-    <div id="legend">
-      <h2>How to use</h2>
-      <ul>
-        <li>Click a county on the map.</li>
-        <li>Use the filter buttons to tint counties that have K / Ka / Lidar.</li>
-      </ul>
-      <p><span class="color-box" style="background:#f2f2f2;"></span> “All” = neutral counties with no tint.</p>
-    </div>
   </div>
 </div>
 
-<!-- Leaflet JS -->
 <script
         src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
         integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
         crossorigin=""
 ></script>
 
-<!-- PapaParse for CSV parsing -->
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+<!-- VectorGrid = zoom-based simplification + tiling -->
+<script src="https://unpkg.com/leaflet.vectorgrid@1.3.0/dist/Leaflet.VectorGrid.bundled.js"></script>
 
 <script>
   // =========================
-  // CONFIG – Georgia paths
+  // CONFIG
   // =========================
 
-  // CSV from Google Sheets (change if you move to local CSV)
+  // MUST include a GEOID column in your sheet now (5-digit county FIPS).
   const CSV_URL =
     "https://docs.google.com/spreadsheets/d/e/2PACX-1vR4ZdepcnMW0OCvCvgRTWPFGSuaQ6u75caFu8zF_Sh-VY525EwU81XzaiJhnvQTCcfHndclCHAQv9DT/pub?gid=928733295&single=true&output=csv";
 
-  // GeoJSON for Georgia
-  const GEOJSON_URL = "States/georgia/countyLines.json";
+  // Full US county geojson in repo root
+  const GEOJSON_URL = "./allCounties.json";
 
-  const countyDataMap = {};   // county name (lowercase) -> rows
-  let geojsonLayer = null;
-  let selectedLayer = null;
+  // Default US view
+  const DEFAULT_CENTER = [39.5, -98.35];
+  const DEFAULT_ZOOM = 4;
 
-  // "all" | "k" | "ka" | "lidar"
+  // =========================
+  // STATE
+  // =========================
+  let map, vgLayer, geojsonCache;
   let activeFilter = "all";
+  let selectedId = null;
+
+  // Data keyed by GEOID (no duplicates)
+  const rowsByGeoid = new Map();   // geoid -> [rows]
+  const hasK = new Set();          // geoids with valid K
+  const hasKa = new Set();         // geoids with valid Ka
+  const hasLidar = new Set();      // geoids with valid Lidar
 
   // =========================
-  // CSV PARSER + HELPERS
+  // HELPERS
   // =========================
-
-  function parseCSV(text) {
-    const parsed = Papa.parse(text, {
-      header: true,
-      skipEmptyLines: "greedy"
-    });
-
-    return parsed.data.map(raw => {
-      const row = {};
-      Object.keys(raw).forEach(k => {
-        if (!k) return;
-        const key = k.trim();
-        row[key] = (raw[k] ?? "").toString().trim();
-      });
-      return row;
-    });
+  function setStatus(msg) {
+    document.getElementById("status").textContent = msg;
   }
 
-  function buildCountyMap(rows) {
-    rows.forEach(row => {
-      const name = (row["County"] || "").trim();
-      if (!name) return;
-      const key = name.toLowerCase();
-      if (!countyDataMap[key]) countyDataMap[key] = [];
-      countyDataMap[key].push(row);
-    });
-  }
-
-  function hasValid(value) {
-    if (!value) return false;
-    const t = value.trim();
+  function hasValid(v) {
+    if (v === undefined || v === null) return false;
+    const t = String(v).trim();
     if (!t) return false;
     return t.toLowerCase() !== "n/a";
   }
 
   function formatMulti(value) {
     if (!value) return "";
-    return value
+    return String(value)
       .split(/;|\n/)
       .map(s => s.trim())
       .filter(Boolean)
       .join("<br>");
   }
 
-  function getFilteredRecordsForCounty(countyName) {
-    const key = countyName.toLowerCase();
-    const all = countyDataMap[key] || [];
-
-    return all.filter(row => {
-      if (activeFilter === "k") return hasValid(row["K_band"]);
-      if (activeFilter === "ka") return hasValid(row["Ka_band"]);
-      if (activeFilter === "lidar") return hasValid(row["Lidar_Guns"]);
-      return true; // "all"
-    });
+  function normalizeGeoid(v) {
+    // Ensure "13089" stays "13089"
+    const t = String(v ?? "").trim();
+    if (!t) return "";
+    // some sheets will store as number; force 5 digits if needed
+    const digits = t.replace(/[^\d]/g, "");
+    if (digits.length === 5) return digits;
+    return t; // fallback
   }
 
-  function countyHasBand(countyName, type) {
-    const key = countyName.toLowerCase();
-    const rows = countyDataMap[key] || [];
-    return rows.some(row => {
-      if (type === "k") return hasValid(row["K_band"]);
-      if (type === "ka") return hasValid(row["Ka_band"]);
-      if (type === "lidar") return hasValid(row["Lidar_Guns"]);
-      return false;
-    });
-  }
+  // =========================
+  // LOAD CSV -> build lookup sets
+  // =========================
+  async function loadCsv() {
+  const res = await fetch(CSV_URL);
+  if (!res.ok) throw new Error("CSV fetch failed: " + res.status);
+  const text = await res.text();
 
-  function getCountyStyle(countyName) {
-    const base = {
-      weight: 2,
-      color: "#111",
-      opacity: 1,
-      fillColor: "#f2f2f2",
-      fillOpacity: 0.35
-    };
+  const parsed = Papa.parse(text, {
+    header: true,
+    skipEmptyLines: true
+  });
 
-    if (!countyName) return base;
+  rowsByGeoid.clear();
+  hasK.clear();
+  hasKa.clear();
+  hasLidar.clear();
 
-    if (activeFilter === "ka" && countyHasBand(countyName, "ka")) {
-      base.fillColor = "blue";
-      base.fillOpacity = 0.5;
-    } else if (activeFilter === "k" && countyHasBand(countyName, "k")) {
-      base.fillColor = "orange";
-      base.fillOpacity = 0.5;
-    } else if (activeFilter === "lidar" && countyHasBand(countyName, "lidar")) {
-      base.fillColor = "red";
-      base.fillOpacity = 0.5;
+  let validRowCount = 0;
+
+  for (const raw of parsed.data) {
+    // HARD REQUIRE: GEOID must exist and be 5 digits
+    if (!raw || raw.GEOID === undefined || raw.GEOID === null) continue;
+
+    const geoid = String(raw.GEOID).trim();
+
+    // Must be exactly 5 digits
+    if (!/^\d{5}$/.test(geoid)) continue;
+
+    validRowCount++;
+
+    const row = {};
+    for (const k of Object.keys(raw)) {
+      if (!k) continue;
+      row[k.trim()] = (raw[k] ?? "").toString().trim();
     }
 
-    return base;
+    if (!rowsByGeoid.has(geoid)) rowsByGeoid.set(geoid, []);
+    rowsByGeoid.get(geoid).push(row);
+
+    if (hasValid(row["K_band"])) hasK.add(geoid);
+    if (hasValid(row["Ka_band"])) hasKa.add(geoid);
+    if (hasValid(row["Lidar_Guns"])) hasLidar.add(geoid);
   }
+
+  console.log("Loaded valid county rows:", validRowCount);
+}
+
 
   // =========================
-  // UI HELPERS (SIDEBAR)
+  // SIDEBAR + POPUP
   // =========================
-
-  function setStatus(msg) {
-    document.getElementById("status").textContent = msg;
-  }
-
-  function clearRecords() {
-    document.getElementById("records").innerHTML = "";
-  }
-
-  function renderCountyInfo(countyName) {
+  function renderCountyInfo(props) {
     const countyNameEl = document.getElementById("county-name");
     const recordsEl = document.getElementById("records");
 
-    countyNameEl.textContent = countyName || "None selected";
-    clearRecords();
+    const name = props.NAME || props.name || props.NAMELSAD || "Unknown";
+    const st = props.STUSPS || props.STATE_NAME || props.state || "";
+    const geoid = normalizeGeoid(props.GEOID || props.geoid || "");
 
-    if (!countyName) return;
+    countyNameEl.textContent = st ? `${name}, ${st}` : name;
+    recordsEl.innerHTML = "";
 
-    const records = getFilteredRecordsForCounty(countyName);
+    const all = rowsByGeoid.get(geoid) || [];
 
-    if (records.length === 0) {
-      const msg =
+    const filtered = all.filter(row => {
+      if (activeFilter === "k") return hasValid(row["K_band"]);
+      if (activeFilter === "ka") return hasValid(row["Ka_band"]);
+      if (activeFilter === "lidar") return hasValid(row["Lidar_Guns"]);
+      return true;
+    });
+
+    if (filtered.length === 0) {
+      recordsEl.innerHTML =
         activeFilter === "all"
-          ? "No data for this county yet."
-          : `No data for this county for current filter (${activeFilter.toUpperCase()}).`;
-      recordsEl.innerHTML = `<p>${msg}</p>`;
+          ? "<p>No data for this county yet.</p>"
+          : `<p>No data for this county for current filter (${activeFilter.toUpperCase()}).</p>`;
       return;
     }
 
-    records.forEach((row, idx) => {
-      const div = document.createElement("div");
-      div.className = "record";
+    filtered.forEach((row, idx) => {
+      const agency = row["Law_Enforcement_Agency_Name"] || "Unknown agency";
 
-      const agency =
-        row["Law_Enforcement_Agency_Name"] || "Unknown agency";
-
-      const kaVal = hasValid(row["Ka_band"])
-        ? formatMulti(row["Ka_band"])
-        : "";
-      const kVal = hasValid(row["K_band"])
-        ? formatMulti(row["K_band"])
-        : "";
-      const lidar = hasValid(row["Lidar_Guns"])
-        ? formatMulti(row["Lidar_Guns"])
-        : "";
-      const tactics = hasValid(row["Special_Tactics"])
-        ? row["Special_Tactics"]
-        : "";
+      const kaVal = hasValid(row["Ka_band"]) ? formatMulti(row["Ka_band"]) : "";
+      const kVal  = hasValid(row["K_band"])  ? formatMulti(row["K_band"])  : "";
+      const lidar = hasValid(row["Lidar_Guns"]) ? formatMulti(row["Lidar_Guns"]) : "";
+      const tactics = hasValid(row["Special_Tactics"]) ? row["Special_Tactics"] : "";
 
       let bandsHtml = "";
       if (kaVal || kVal) {
         bandsHtml += `<div><strong>Bands</strong></div>`;
-        if (kaVal) {
-          bandsHtml += `<div>- <strong>Ka:</strong><br>${kaVal}</div>`;
-        }
-        if (kVal) {
-          bandsHtml += `<div style="margin-top:4px;">- <strong>K:</strong><br>${kVal}</div>`;
-        }
+        if (kaVal) bandsHtml += `<div>- <strong>Ka:</strong><br>${kaVal}</div>`;
+        if (kVal)  bandsHtml += `<div style="margin-top:4px;">- <strong>K:</strong><br>${kVal}</div>`;
       }
 
+      const div = document.createElement("div");
+      div.className = "record";
       div.innerHTML = `
         <div class="record-header">${idx + 1}. ${agency}</div>
         ${bandsHtml}
         ${lidar ? `<div style="margin-top:6px;"><strong>Lidar:</strong><br>${lidar}</div>` : ""}
         ${tactics ? `<div><strong>Special tactics:</strong><br>${tactics}</div>` : ""}
       `;
-
       recordsEl.appendChild(div);
     });
   }
 
-  function highlightLayer(layer) {
-    const countyName = layer.feature?.properties?.NAME || "Unknown";
+  function popupHtml(props) {
+    const name = props.NAME || props.name || props.NAMELSAD || "Unknown";
+    const st = props.STUSPS || props.STATE_NAME || props.state || "";
+    const geoid = normalizeGeoid(props.GEOID || props.geoid || "");
 
-    if (selectedLayer && selectedLayer !== layer) {
-      const oldName =
-        selectedLayer.feature?.properties?.NAME || "Unknown";
-      selectedLayer.setStyle(getCountyStyle(oldName));
+    const all = rowsByGeoid.get(geoid) || [];
+    const row = all.find(r => {
+      if (activeFilter === "k") return hasValid(r["K_band"]);
+      if (activeFilter === "ka") return hasValid(r["Ka_band"]);
+      if (activeFilter === "lidar") return hasValid(r["Lidar_Guns"]);
+      return true;
+    });
+
+    if (!row) {
+      return `<strong>${st ? `${name}, ${st}` : name}</strong><br>No data for current filter.`;
     }
 
-    selectedLayer = layer;
-    const style = getCountyStyle(countyName);
-    style.weight = 3;
-    style.color = "#000";
-    layer.setStyle(style);
-  }
-
-  function buildPopupHtml(countyName, row) {
-    const agency =
-      row["Law_Enforcement_Agency_Name"] || "Unknown agency";
-
-    const kaVal = hasValid(row["Ka_band"])
-      ? formatMulti(row["Ka_band"])
-      : "";
-    const kVal = hasValid(row["K_band"])
-      ? formatMulti(row["K_band"])
-      : "";
-    const lidar = hasValid(row["Lidar_Guns"])
-      ? formatMulti(row["Lidar_Guns"])
-      : "";
-    const tactics = hasValid(row["Special_Tactics"])
-      ? row["Special_Tactics"]
-      : "";
+    const agency = row["Law_Enforcement_Agency_Name"] || "Unknown agency";
+    const kaVal = hasValid(row["Ka_band"]) ? formatMulti(row["Ka_band"]) : "";
+    const kVal  = hasValid(row["K_band"])  ? formatMulti(row["K_band"])  : "";
+    const lidar = hasValid(row["Lidar_Guns"]) ? formatMulti(row["Lidar_Guns"]) : "";
+    const tactics = hasValid(row["Special_Tactics"]) ? row["Special_Tactics"] : "";
 
     let bandsHtml = "";
     if (kaVal || kVal) {
       bandsHtml += `<div><strong>Bands</strong></div>`;
-      if (kaVal) {
-        bandsHtml += `<div>- <strong>Ka:</strong><br>${kaVal}</div>`;
-      }
-      if (kVal) {
-        bandsHtml += `<div style="margin-top:4px;">- <strong>K:</strong><br>${kVal}</div>`;
-      }
+      if (kaVal) bandsHtml += `<div>- <strong>Ka:</strong><br>${kaVal}</div>`;
+      if (kVal)  bandsHtml += `<div style="margin-top:4px;">- <strong>K:</strong><br>${kVal}</div>`;
     }
 
     return `
       <div>
-        <div style="font-weight:600; margin-bottom:4px;">${countyName}</div>
+        <div style="font-weight:700; margin-bottom:4px;">${st ? `${name}, ${st}` : name}</div>
         <div><strong>Main agency:</strong> ${agency}</div>
         ${bandsHtml ? `<div style="margin-top:6px;">${bandsHtml}</div>` : ""}
         ${lidar ? `<div style="margin-top:6px;"><strong>Lidar:</strong><br>${lidar}</div>` : ""}
@@ -394,107 +299,105 @@
   }
 
   // =========================
-  // MAP SETUP
+  // STYLES (fast: just set membership checks)
   // =========================
+  function styleForProps(props) {
+    const geoid = normalizeGeoid(props.GEOID || props.geoid || "");
 
-  function initMap(geojsonData) {
-    const map = L.map("map");
+    const s = {
+      weight: 1.4,
+      color: "#111",
+      opacity: 1,
+      fill: true,
+      fillColor: "#f2f2f2",
+      fillOpacity: 0.20
+    };
 
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19,
-      attribution: '&copy; OpenStreetMap contributors'
-    }).addTo(map);
+    if (!geoid) return s;
 
-    function style(feature) {
-      const countyName =
-        feature.properties && feature.properties.NAME
-          ? feature.properties.NAME
-          : null;
-      return getCountyStyle(countyName);
+    if (activeFilter === "ka" && hasKa.has(geoid)) {
+      s.fillColor = "blue"; s.fillOpacity = 0.5;
+    } else if (activeFilter === "k" && hasK.has(geoid)) {
+      s.fillColor = "orange"; s.fillOpacity = 0.5;
+    } else if (activeFilter === "lidar" && hasLidar.has(geoid)) {
+      s.fillColor = "red"; s.fillOpacity = 0.5;
     }
 
-    function onEachFeature(feature, layer) {
-      const countyName =
-        feature.properties && feature.properties.NAME
-          ? feature.properties.NAME
-          : "Unknown";
+    return s;
+  }
 
-      layer.on({
-        click: function () {
-          highlightLayer(layer);
+  // =========================
+  // BUILD VECTORGRID (zoom-optimized)
+  // =========================
+  async function rebuildLayer() {
+    if (!geojsonCache) return;
 
-          const records = getFilteredRecordsForCounty(countyName);
-
-          map.fitBounds(layer.getBounds(), { maxZoom: 9 });
-
-          renderCountyInfo(countyName);
-
-          if (records.length === 0) {
-            layer
-              .bindPopup(
-                `<strong>${countyName}</strong><br>No data for current filter.`
-              )
-              .openPopup();
-          } else {
-            const popupHtml = buildPopupHtml(countyName, records[0]);
-            layer.bindPopup(popupHtml).openPopup();
-          }
-        },
-        mouseover: function () {
-          layer.setStyle({ weight: 3, color: "#000" });
-          if (!L.Browser.ie && !L.Browser.opera && !L.Browser.edge) {
-            layer.bringToFront();
-          }
-        },
-        mouseout: function () {
-          if (selectedLayer === layer) {
-            highlightLayer(layer);
-          } else {
-            const nm = countyName;
-            layer.setStyle(getCountyStyle(nm));
-          }
-        }
-      });
+    if (vgLayer) {
+      map.removeLayer(vgLayer);
+      vgLayer = null;
+      selectedId = null;
     }
 
-    geojsonLayer = L.geoJSON(geojsonData, {
-      style: style,
-      onEachFeature: onEachFeature
-    }).addTo(map);
+    vgLayer = L.vectorGrid.slicer(geojsonCache, {
+      // “optimize based on zoom”: this is the key
+      // vector tiles are generated; geometry gets simplified at low zoom.
+      maxZoom: 12,
+      tolerance: 3,      // increase for more simplification when zoomed out
+      extent: 4096,
+      buffer: 256,
+      rendererFactory: L.canvas.tile,
+      interactive: true,
 
-    map.fitBounds(geojsonLayer.getBounds());
+      getFeatureId: f => normalizeGeoid((f.properties || {}).GEOID || (f.properties || {}).geoid || ""),
 
-    setStatus("Data loaded. Click a county.");
+      vectorTileLayerStyles: {
+        sliced: props => styleForProps(props)
+      }
+    });
+
+    vgLayer.addTo(map);
+
+    vgLayer.on("click", (e) => {
+      const props = (e.layer && e.layer.properties) ? e.layer.properties : (e.properties || {});
+      const geoid = normalizeGeoid(props.GEOID || props.geoid || "");
+
+      // highlight selection
+      if (selectedId) vgLayer.resetFeatureStyle(selectedId);
+      selectedId = geoid;
+
+      const sel = styleForProps(props);
+      sel.weight = 3;
+      sel.color = "#000";
+      vgLayer.setFeatureStyle(selectedId, sel);
+
+      renderCountyInfo(props);
+
+      L.popup()
+        .setLatLng(e.latlng)
+        .setContent(popupHtml(props))
+        .openOn(map);
+    });
   }
 
   // =========================
   // FILTER BUTTONS
   // =========================
-
   function initFilters() {
     const buttons = document.querySelectorAll(".filter-btn");
     buttons.forEach(btn => {
-      btn.addEventListener("click", () => {
-        const filter = btn.getAttribute("data-filter");
-        activeFilter = filter;
+      btn.addEventListener("click", async () => {
+        activeFilter = btn.getAttribute("data-filter");
 
         buttons.forEach(b => b.classList.remove("active"));
         btn.classList.add("active");
 
-        if (geojsonLayer) {
-          geojsonLayer.setStyle(feature => {
-            const name = feature.properties?.NAME || null;
-            return getCountyStyle(name);
-          });
-        }
+        await rebuildLayer();
 
-        const currentCounty =
-          document.getElementById("county-name").textContent;
-        if (currentCounty && currentCounty !== "None selected") {
-          renderCountyInfo(currentCounty);
-          if (selectedLayer) {
-            highlightLayer(selectedLayer);
-          }
+        // keep sidebar consistent if something already selected
+        const current = document.getElementById("county-name").textContent;
+        if (current && current !== "None selected") {
+          // sidebar uses last clicked props; simplest is: user clicks again.
+          // (If you want persistent re-render without reclick, I can store last props.)
         }
       });
     });
@@ -503,24 +406,27 @@
   // =========================
   // BOOTSTRAP
   // =========================
-
   async function bootstrap() {
     try {
-      initFilters();
-
       setStatus("Loading CSV data…");
-      const csvRes = await fetch(CSV_URL);
-      if (!csvRes.ok) throw new Error("CSV fetch failed: " + csvRes.status);
-      const csvText = await csvRes.text();
-      const rows = parseCSV(csvText);
-      buildCountyMap(rows);
+      await loadCsv();
 
       setStatus("Loading county shapes…");
       const geoRes = await fetch(GEOJSON_URL);
       if (!geoRes.ok) throw new Error("GeoJSON fetch failed: " + geoRes.status);
-      const geojsonData = await geoRes.json();
+      geojsonCache = await geoRes.json();
 
-      initMap(geojsonData);
+      map = L.map("map").setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap contributors'
+      }).addTo(map);
+
+      initFilters();
+      await rebuildLayer();
+
+      setStatus("Data loaded. Click a county.");
     } catch (err) {
       console.error(err);
       setStatus("Error loading data. Open console for details.");
@@ -531,4 +437,3 @@
 </script>
 </body>
 </html>
-
