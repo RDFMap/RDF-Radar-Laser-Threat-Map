@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Enforcement Map</title>
 
   <link
@@ -14,7 +15,7 @@
   <style>
     html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
     #app { display: flex; height: 100vh; width: 100vw; }
-    #map { flex: 2; }
+    #map { flex: 2; min-width: 0; }
 
     #sidebar {
       flex: 1;
@@ -57,6 +58,7 @@
 <body>
 <div id="app">
   <div id="map"></div>
+
   <div id="sidebar">
     <h1>Enforcement Map</h1>
     <div id="status">Loading…</div>
@@ -84,23 +86,17 @@
 ></script>
 
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
-
-<!-- VectorGrid = zoom-based simplification + tiling -->
 <script src="https://unpkg.com/leaflet.vectorgrid@1.3.0/dist/Leaflet.VectorGrid.bundled.js"></script>
 
 <script>
   // =========================
   // CONFIG
   // =========================
-
-  // MUST include a GEOID column in your sheet now (5-digit county FIPS).
   const CSV_URL =
     "https://docs.google.com/spreadsheets/d/e/2PACX-1vR4ZdepcnMW0OCvCvgRTWPFGSuaQ6u75caFu8zF_Sh-VY525EwU81XzaiJhnvQTCcfHndclCHAQv9DT/pub?gid=928733295&single=true&output=csv";
 
-  // Full US county geojson in repo root
   const GEOJSON_URL = "./allCounties.json";
 
-  // Default US view
   const DEFAULT_CENTER = [39.5, -98.35];
   const DEFAULT_ZOOM = 4;
 
@@ -111,11 +107,10 @@
   let activeFilter = "all";
   let selectedId = null;
 
-  // Data keyed by GEOID (no duplicates)
-  const rowsByGeoid = new Map();   // geoid -> [rows]
-  const hasK = new Set();          // geoids with valid K
-  const hasKa = new Set();         // geoids with valid Ka
-  const hasLidar = new Set();      // geoids with valid Lidar
+  const rowsByGeoid = new Map();
+  const hasK = new Set();
+  const hasKa = new Set();
+  const hasLidar = new Set();
 
   // =========================
   // HELPERS
@@ -141,63 +136,74 @@
   }
 
   function normalizeGeoid(v) {
-    // Ensure "13089" stays "13089"
-    const t = String(v ?? "").trim();
+    let t = String(v ?? "").trim();
     if (!t) return "";
-    // some sheets will store as number; force 5 digits if needed
-    const digits = t.replace(/[^\d]/g, "");
-    if (digits.length === 5) return digits;
-    return t; // fallback
-  }
 
-  // =========================
-  // LOAD CSV -> build lookup sets
-  // =========================
-  async function loadCsv() {
-  const res = await fetch(CSV_URL);
-  if (!res.ok) throw new Error("CSV fetch failed: " + res.status);
-  const text = await res.text();
+    if (/^\d{5}$/.test(t)) return t;
 
-  const parsed = Papa.parse(text, {
-    header: true,
-    skipEmptyLines: true
-  });
-
-  rowsByGeoid.clear();
-  hasK.clear();
-  hasKa.clear();
-  hasLidar.clear();
-
-  let validRowCount = 0;
-
-  for (const raw of parsed.data) {
-    // HARD REQUIRE: GEOID must exist and be 5 digits
-    if (!raw || raw.GEOID === undefined || raw.GEOID === null) continue;
-
-    const geoid = String(raw.GEOID).trim();
-
-    // Must be exactly 5 digits
-    if (!/^\d{5}$/.test(geoid)) continue;
-
-    validRowCount++;
-
-    const row = {};
-    for (const k of Object.keys(raw)) {
-      if (!k) continue;
-      row[k.trim()] = (raw[k] ?? "").toString().trim();
+    if (/^\d+(\.\d+)?$/.test(t)) {
+      const n = Math.floor(Number(t));
+      if (Number.isFinite(n)) {
+        const s = String(n).padStart(5, "0");
+        if (/^\d{5}$/.test(s)) return s;
+      }
     }
 
-    if (!rowsByGeoid.has(geoid)) rowsByGeoid.set(geoid, []);
-    rowsByGeoid.get(geoid).push(row);
+    const digits = t.replace(/\D/g, "");
+    if (digits.length === 5) return digits;
 
-    if (hasValid(row["K_band"])) hasK.add(geoid);
-    if (hasValid(row["Ka_band"])) hasKa.add(geoid);
-    if (hasValid(row["Lidar_Guns"])) hasLidar.add(geoid);
+    if (digits.length === 6 && digits.endsWith("0")) {
+      const maybe = digits.slice(0, 5);
+      if (/^\d{5}$/.test(maybe)) return maybe;
+    }
+
+    return "";
   }
 
-  console.log("Loaded valid county rows:", validRowCount);
-}
+  // =========================
+  // LOAD CSV
+  // =========================
+  async function loadCsv() {
+    const res = await fetch(CSV_URL);
+    if (!res.ok) throw new Error("CSV fetch failed: " + res.status);
+    const text = await res.text();
 
+    const parsed = Papa.parse(text, {
+      header: true,
+      skipEmptyLines: true
+    });
+
+    rowsByGeoid.clear();
+    hasK.clear();
+    hasKa.clear();
+    hasLidar.clear();
+
+    let validRowCount = 0;
+
+    for (const raw of parsed.data) {
+      if (!raw) continue;
+
+      const geoid = normalizeGeoid(raw.GEOID);
+      if (!geoid) continue;
+
+      validRowCount++;
+
+      const row = {};
+      for (const k of Object.keys(raw)) {
+        if (!k) continue;
+        row[k.trim()] = (raw[k] ?? "").toString().trim();
+      }
+
+      if (!rowsByGeoid.has(geoid)) rowsByGeoid.set(geoid, []);
+      rowsByGeoid.get(geoid).push(row);
+
+      if (hasValid(row["K_band"])) hasK.add(geoid);
+      if (hasValid(row["Ka_band"])) hasKa.add(geoid);
+      if (hasValid(row["Lidar_Guns"])) hasLidar.add(geoid);
+    }
+
+    console.log("Loaded valid county rows:", validRowCount);
+  }
 
   // =========================
   // SIDEBAR + POPUP
@@ -208,7 +214,7 @@
 
     const name = props.NAME || props.name || props.NAMELSAD || "Unknown";
     const st = props.STUSPS || props.STATE_NAME || props.state || "";
-    const geoid = normalizeGeoid(props.GEOID || props.geoid || "");
+    const geoid = normalizeGeoid(props.GEOID || props.geoid || props.GEOID10 || props.GEO_ID || "");
 
     countyNameEl.textContent = st ? `${name}, ${st}` : name;
     recordsEl.innerHTML = "";
@@ -260,7 +266,7 @@
   function popupHtml(props) {
     const name = props.NAME || props.name || props.NAMELSAD || "Unknown";
     const st = props.STUSPS || props.STATE_NAME || props.state || "";
-    const geoid = normalizeGeoid(props.GEOID || props.geoid || "");
+    const geoid = normalizeGeoid(props.GEOID || props.geoid || props.GEOID10 || props.GEO_ID || "");
 
     const all = rowsByGeoid.get(geoid) || [];
     const row = all.find(r => {
@@ -299,10 +305,10 @@
   }
 
   // =========================
-  // STYLES (fast: just set membership checks)
+  // STYLES
   // =========================
   function styleForProps(props) {
-    const geoid = normalizeGeoid(props.GEOID || props.geoid || "");
+    const geoid = normalizeGeoid(props.GEOID || props.geoid || props.GEOID10 || props.GEO_ID || "");
 
     const s = {
       weight: 1.4,
@@ -327,7 +333,7 @@
   }
 
   // =========================
-  // BUILD VECTORGRID (zoom-optimized)
+  // BUILD VECTORGRID
   // =========================
   async function rebuildLayer() {
     if (!geojsonCache) return;
@@ -339,16 +345,23 @@
     }
 
     vgLayer = L.vectorGrid.slicer(geojsonCache, {
-      // “optimize based on zoom”: this is the key
-      // vector tiles are generated; geometry gets simplified at low zoom.
       maxZoom: 12,
-      tolerance: 3,      // increase for more simplification when zoomed out
+      tolerance: 3,
       extent: 4096,
       buffer: 256,
-      rendererFactory: L.canvas.tile,
+
+      // FIX: SVG renderer so clicks work reliably on Leaflet 1.8+ / 1.9+
+      rendererFactory: L.svg.tile,
+
+      // FIX: force it on a top pane
+      pane: "countiesPane",
+
       interactive: true,
 
-      getFeatureId: f => normalizeGeoid((f.properties || {}).GEOID || (f.properties || {}).geoid || ""),
+      getFeatureId: f => {
+        const p = (f && f.properties) ? f.properties : {};
+        return normalizeGeoid(p.GEOID || p.geoid || p.GEOID10 || p.GEO_ID || "");
+      },
 
       vectorTileLayerStyles: {
         sliced: props => styleForProps(props)
@@ -358,24 +371,35 @@
     vgLayer.addTo(map);
 
     vgLayer.on("click", (e) => {
-      const props = (e.layer && e.layer.properties) ? e.layer.properties : (e.properties || {});
-      const geoid = normalizeGeoid(props.GEOID || props.geoid || "");
+      try {
+        console.log("VG CLICK FIRED", e);
 
-      // highlight selection
-      if (selectedId) vgLayer.resetFeatureStyle(selectedId);
-      selectedId = geoid;
+        const props =
+          (e && e.layer && e.layer.properties) ? e.layer.properties :
+          (e && e.properties) ? e.properties :
+          {};
 
-      const sel = styleForProps(props);
-      sel.weight = 3;
-      sel.color = "#000";
-      vgLayer.setFeatureStyle(selectedId, sel);
+        const geoid = normalizeGeoid(props.GEOID || props.geoid || props.GEOID10 || props.GEO_ID || "");
 
-      renderCountyInfo(props);
+        if (selectedId) vgLayer.resetFeatureStyle(selectedId);
+        selectedId = geoid || null;
 
-      L.popup()
-        .setLatLng(e.latlng)
-        .setContent(popupHtml(props))
-        .openOn(map);
+        if (selectedId) {
+          const sel = styleForProps(props);
+          sel.weight = 3;
+          sel.color = "#000";
+          vgLayer.setFeatureStyle(selectedId, sel);
+        }
+
+        renderCountyInfo(props);
+
+        L.popup()
+          .setLatLng(e.latlng)
+          .setContent(popupHtml(props))
+          .openOn(map);
+      } catch (err) {
+        console.error("VG CLICK HANDLER ERROR:", err);
+      }
     });
   }
 
@@ -392,13 +416,6 @@
         btn.classList.add("active");
 
         await rebuildLayer();
-
-        // keep sidebar consistent if something already selected
-        const current = document.getElementById("county-name").textContent;
-        if (current && current !== "None selected") {
-          // sidebar uses last clicked props; simplest is: user clicks again.
-          // (If you want persistent re-render without reclick, I can store last props.)
-        }
       });
     });
   }
@@ -422,6 +439,16 @@
         maxZoom: 19,
         attribution: '&copy; OpenStreetMap contributors'
       }).addTo(map);
+
+      // Top pane for counties
+      map.createPane("countiesPane");
+      map.getPane("countiesPane").style.zIndex = 650;
+
+      // Debug: proves the map is receiving clicks at all
+      map.on("click", (e) => console.log("MAP CLICK", e.latlng));
+
+      setTimeout(() => map.invalidateSize(), 0);
+      window.addEventListener("resize", () => map.invalidateSize());
 
       initFilters();
       await rebuildLayer();
