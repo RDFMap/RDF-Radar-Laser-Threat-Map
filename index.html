@@ -206,6 +206,27 @@
 
     .flagline { margin-top: 6px; }
     .flagline div { margin-top: 3px; }
+
+    /* =========================
+       NEW: Notes/Special Tactics link formatting
+       ========================= */
+    .notes-block { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
+    .note-line { line-height: 1.25; overflow-wrap: anywhere; word-break: break-word; }
+    .note-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      text-decoration: underline;
+      font-weight: 650;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+    .note-domain {
+      font-size: 12px;
+      color: #666;
+      font-weight: 500;
+    }
+    .note-text { white-space: normal; }
   </style>
 </head>
 
@@ -438,11 +459,19 @@
       .replace(/'/g, "&#039;");
   }
 
+  function escapeAttr(s) {
+    return String(s ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/"/g, "&quot;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+
   function normalizeBreaksToNewlines(s) {
     if (!hasValid(s)) return "";
     let t = String(s);
 
-    // Handle both real <br> and escaped &lt;br&gt; forms (your screenshot issue)
+    // Handle both real <br> and escaped &lt;br&gt; forms
     t = t.replace(/&lt;\s*br\s*\/?\s*&gt;/gi, "\n");
     t = t.replace(/<\s*br\s*\/?\s*>/gi, "\n");
 
@@ -461,6 +490,104 @@
       .filter(Boolean)
       .map(s => escapeHtml(s))
       .join("<br>");
+  }
+
+  // =========================
+  // NEW: Notes/Special tactics formatting with clickable links
+  // Supports:
+  // - "Label | https://..."
+  // - "[Label](https://...)"
+  // - "Label https://..."
+  // - "https://..."
+  // =========================
+  function normalizeUrl_(raw) {
+    let u = String(raw || "").trim();
+    if (!u) return "";
+
+    if (/^www\./i.test(u)) u = "https://" + u;
+    u = u.replace(/[)\],.]+$/g, "");
+
+    try {
+      const parsed = new URL(u);
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return "";
+      return parsed.href;
+    } catch {
+      return "";
+    }
+  }
+
+  function hostFromUrl_(u) {
+    try {
+      return new URL(u).hostname.replace(/^www\./i, "");
+    } catch { return ""; }
+  }
+
+  function parseLinkLine_(line) {
+    const s = String(line || "").trim();
+    if (!s) return null;
+
+    // Label | URL
+    let m = s.match(/^(.+?)\s*\|\s*(\S+)\s*$/);
+    if (m) {
+      const url = normalizeUrl_(m[2]);
+      if (!url) return null;
+      return { label: m[1].trim(), url };
+    }
+
+    // Markdown [Label](URL)
+    m = s.match(/^\[([^\]]+?)\]\(([^)]+)\)\s*$/);
+    if (m) {
+      const url = normalizeUrl_(m[2]);
+      if (!url) return null;
+      return { label: m[1].trim(), url };
+    }
+
+    // URL only
+    m = s.match(/^(\S+)$/);
+    if (m) {
+      const url = normalizeUrl_(m[1]);
+      if (!url) return null;
+      return { label: hostFromUrl_(url) || "Link", url };
+    }
+
+    // Label + URL at end
+    m = s.match(/^(.*?)(https?:\/\/\S+|www\.\S+)\s*$/i);
+    if (m) {
+      const url = normalizeUrl_(m[2]);
+      if (!url) return null;
+      const label = (m[1] || "").trim().replace(/[-–—:|]+$/g, "").trim();
+      return { label: label || (hostFromUrl_(url) || "Link"), url };
+    }
+
+    return null;
+  }
+
+  function formatNotesWithLinks(value) {
+    if (!hasValid(value)) return "";
+
+    const raw = normalizeBreaksToNewlines(value);
+    const parts = raw
+      .split(/;|\n/)
+      .map(s => s.trim())
+      .filter(Boolean);
+
+    if (parts.length === 0) return "";
+
+    const linesHtml = parts.map(p => {
+      const link = parseLinkLine_(p);
+      if (link) {
+        const host = hostFromUrl_(link.url);
+        return `
+          <div class="note-line">
+            <a class="note-link" href="${escapeAttr(link.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(link.label)}</a>
+            ${host ? `<span class="note-domain">(${escapeHtml(host)})</span>` : ""}
+          </div>
+        `;
+      }
+      return `<div class="note-line note-text">${escapeHtml(p)}</div>`;
+    });
+
+    return `<div class="notes-block">${linesHtml.join("")}</div>`;
   }
 
   function getField(row, ...keys) {
@@ -561,7 +688,6 @@
   }
 
   function rowHasAnyContent(row) {
-    // As long as ONE of these is filled, treat as valid content
     const core = hasValid(row["K_band"]) || hasValid(row["Ka_band"]) || hasValid(row["Lidar_Guns"]) || hasValid(row["X_band"]);
     if (core) return true;
 
@@ -789,7 +915,10 @@
       const kaVal = hasValid(row["Ka_band"]) ? formatMulti(row["Ka_band"]) : "";
       const kVal  = hasValid(row["K_band"])  ? formatMulti(row["K_band"])  : "";
       const lidar = hasValid(row["Lidar_Guns"]) ? formatMulti(row["Lidar_Guns"]) : "";
-      const tactics = hasValid(row["Special_Tactics"]) ? formatMulti(row["Special_Tactics"]) : "";
+
+      // ✅ NEW: notes/tactics render with clickable links
+      const tactics = hasValid(row["Special_Tactics"]) ? formatNotesWithLinks(row["Special_Tactics"]) : "";
+
       const flags = flagsHtmlFromRow(row);
 
       let bandsHtml = "";
@@ -860,8 +989,11 @@
       const kaVal = hasValid(row["Ka_band"]) ? formatMulti(row["Ka_band"]) : "";
       const kVal  = hasValid(row["K_band"])  ? formatMulti(row["K_band"])  : "";
       const lidar = hasValid(row["Lidar_Guns"]) ? formatMulti(row["Lidar_Guns"]) : "";
-      const tactics = hasValid(row["Special_Tactics"]) ? formatMulti(row["Special_Tactics"]) : "";
-      const notes = hasValid(row["Notes"]) ? formatMulti(row["Notes"]) : "";
+
+      // ✅ NEW: notes/tactics render with clickable links
+      const tactics = hasValid(row["Special_Tactics"]) ? formatNotesWithLinks(row["Special_Tactics"]) : "";
+      const notes = hasValid(row["Notes"]) ? formatNotesWithLinks(row["Notes"]) : "";
+
       const flags = flagsHtmlFromRow(row);
 
       let bandsHtml = "";
@@ -949,7 +1081,6 @@
     const p = (feature && feature.properties) ? feature.properties : {};
     const ab = getStateAbbrevFromProps(p);
 
-    // base: thick black borders
     const s = {
       color: "#000",
       weight: 4,
@@ -959,15 +1090,10 @@
       fillColor: "#000"
     };
 
-    // only color fill in STATE MODE
     if (!stateMode) return s;
-
-    // in All mode (and not Ka-freq mode), keep states unfilled/black borders
     if (!kaFreqMode && allMode) return s;
-
     if (!ab) return s;
 
-    // Ka freq mode -> fill if state agencies match freq
     if (kaFreqMode) {
       if (stateMatchesKaFreqSet(ab, kaFreqChoice)) {
         s.fillColor = "blue";
@@ -978,7 +1104,6 @@
       return s;
     }
 
-    // normal filtering: fill based on selected filters, using state patrol data
     if (selectedFilters.size === 0) return s;
 
     const matches = [];
@@ -1015,7 +1140,7 @@
   // =========================
   async function rebuildCountyLayer() {
     if (!geojsonCache) return;
-    if (stateMode) return; // counties OFF in state mode
+    if (stateMode) return;
 
     if (vgLayer) {
       map.removeLayer(vgLayer);
@@ -1110,7 +1235,6 @@
       }
     }).addTo(map);
 
-    // Pointer-events: only clickable in stateMode
     setStateMode(stateMode, {skipRefresh:true});
     refreshStatesStyle();
   }
@@ -1118,7 +1242,6 @@
   function setStateMode(on, opts = {}) {
     stateMode = !!on;
 
-    // Disable/enable state clicks
     if (statesLayer) {
       statesLayer.eachLayer(layer => {
         layer.options.interactive = stateMode;
@@ -1129,17 +1252,15 @@
       });
     }
 
-    // Counties OFF in state mode, ON otherwise
     if (stateMode) {
       if (vgLayer) {
         map.removeLayer(vgLayer);
         vgLayer = null;
         selectedId = null;
       }
-      // close county popups when switching
       map.closePopup();
     } else {
-      rebuildCountyLayer(); // keep county clicking working
+      rebuildCountyLayer();
     }
 
     setPanelsForMode();
@@ -1164,8 +1285,6 @@
   function renderFilterButtons() {
     setButtonActive(document.getElementById("stateModeBtn"), stateMode);
 
-    // Filter buttons stay usable in state mode.
-    // In kaFreqMode, only filter buttons are locked (Ka dropdown still controls it).
     document.querySelectorAll(".filter-btn[data-filter]").forEach(btn => {
       const f = btn.getAttribute("data-filter");
 
@@ -1199,7 +1318,6 @@
   function buildSearchIndex() {
     const items = [];
 
-    // County items
     for (const [geoid, rows] of rowsByGeoid.entries()) {
       const props = countyPropsByGeoid.get(geoid);
       const cName = props ? (props.NAME || props.name || props.NAMELSAD || "Unknown") : "Unknown";
@@ -1218,7 +1336,6 @@
       }
     }
 
-    // State items (state patrol/hwy patrol data)
     for (const [ab, rows] of rowsByState.entries()) {
       const stName = STATE_NAME_MAP[ab] || ab;
       for (const row of rows) {
@@ -1268,7 +1385,6 @@
           if (props) {
             lastClickedProps = props;
             renderCountyInfo(props);
-            // open popup at center of bounds
             if (bounds) {
               const center = bounds.getCenter();
               L.popup().setLatLng(center).setContent(popupHtml(props)).openOn(map);
@@ -1391,13 +1507,11 @@
   // INIT FILTERS
   // =========================
   function initFilters() {
-    // State toggle
     document.getElementById("stateModeBtn").addEventListener("click", () => {
       setStateMode(!stateMode);
       renderFilterButtons();
     });
 
-    // Normal filter buttons
     document.querySelectorAll(".filter-btn[data-filter]").forEach(btn => {
       btn.addEventListener("click", async () => {
         if (kaFreqMode) return;
@@ -1419,7 +1533,6 @@
 
         renderFilterButtons();
 
-        // Update whichever layer is active
         if (!stateMode) {
           await rebuildCountyLayer();
           if (lastClickedProps) renderCountyInfo(lastClickedProps);
@@ -1430,13 +1543,11 @@
       });
     });
 
-    // Ka arrow toggles dropdown
     document.getElementById("kaArrowBtn").addEventListener("click", (e) => {
       e.stopPropagation();
       setKaDropdown(!isKaDropdownOpen());
     });
 
-    // Ka dropdown items
     document.querySelectorAll(".ka-item").forEach(item => {
       item.addEventListener("click", async (e) => {
         e.stopPropagation();
@@ -1454,7 +1565,7 @@
             savedSelectedFilters = new Set(selectedFilters);
           }
           kaFreqMode = true;
-          kaFreqChoice = val; // any | 33.8 | 34.7 | 35.5
+          kaFreqChoice = val;
           allMode = false;
           selectedFilters = new Set(["ka"]);
         }
@@ -1472,7 +1583,6 @@
       });
     });
 
-    // Close Ka dropdown on outside click
     document.addEventListener("click", (e) => {
       const wrap = document.getElementById("kaSplit");
       if (!wrap.contains(e.target)) setKaDropdown(false);
@@ -1514,11 +1624,9 @@
 
       initFilters();
 
-      // build layers
       await rebuildCountyLayer();
       setPanelsForMode();
 
-      // search
       buildSearchIndex();
       initSearch();
 
