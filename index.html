@@ -230,13 +230,13 @@
     .note-text { white-space: normal; }
 
     /* =========================
-       |||MOBILE: COLLAPSIBLE SIDEBAR (DRAWER) + TOGGLE BUTTON|||
+       MOBILE: COLLAPSIBLE SIDEBAR (DRAWER) + TOGGLE BUTTON
        ========================= */
     #sidebarToggle {
       position: fixed;
       top: 12px;
-      right: 12px;   /* |||CHANGED: move to right||| */
-      left: auto;    /* |||CHANGED: clear left||| */
+      right: 12px;
+      left: auto;
       z-index: 1200;
       display: none; /* shown on mobile only */
       height: 42px;
@@ -262,13 +262,67 @@
     }
     #sidebarBackdrop.open { display: block; }
 
+    /* Mobile hint bubble */
+    #mobileHint{
+      position: fixed;
+      top: 62px;
+      right: 12px;
+      z-index: 1199;
+      display: none;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid #d6d6d6;
+      background: rgba(255,255,255,0.96);
+      box-shadow: 0 10px 22px rgba(0,0,0,0.12);
+      line-height: 1.2;
+      max-width: 260px;
+      text-align: left;
+    }
+    #mobileHint.open{ display: block; }
+
+    #mobileHint .mh-title{
+      font-size: 13px;
+      font-weight: 800;
+      margin-bottom: 4px;
+    }
+    #mobileHint .mh-sub{
+      font-size: 12.5px;
+      font-weight: 600;
+      color: #444;
+      line-height: 1.25;
+    }
+
+    /* arrow pointing at menu */
+    #mobileHint::before{
+      content: "";
+      position: absolute;
+      top: -8px;
+      right: 18px;
+      width: 0; height: 0;
+      border-left: 8px solid transparent;
+      border-right: 8px solid transparent;
+      border-bottom: 8px solid rgba(255,255,255,0.96);
+    }
+    #mobileHint::after{
+      content: "";
+      position: absolute;
+      top: -9px;
+      right: 18px;
+      width: 0; height: 0;
+      border-left: 8px solid transparent;
+      border-right: 8px solid transparent;
+      border-bottom: 8px solid #d6d6d6;
+      transform: translateY(-1px);
+      z-index: -1;
+    }
+
     @media (max-width: 900px) {
       #app { display: block; }
       #map { height: 100vh; width: 100vw; }
 
       #sidebarToggle { display: inline-flex; }
 
-      /* |||MOBILE: slightly smaller filter buttons||| */
+      /* smaller filter buttons on mobile */
       .filter-btn{
         min-width: 46px;
         height: 36px;
@@ -316,10 +370,13 @@
 </head>
 
 <body>
-
-<!-- |||MOBILE: TOGGLE + BACKDROP||| -->
+<!-- MOBILE: TOGGLE + BACKDROP + HINT -->
 <button id="sidebarToggle" type="button" aria-label="Open sidebar" aria-expanded="false">☰</button>
 <div id="sidebarBackdrop" aria-hidden="true"></div>
+<div id="mobileHint" aria-hidden="true">
+  <div class="mh-title">Data, Search, and Filters</div>
+  <div class="mh-sub">Tap ☰ to open the sidebar. Search counties/agencies, switch County/State mode, and toggle bands.</div>
+</div>
 
 <div id="app">
   <div id="map"></div>
@@ -560,7 +617,6 @@
   function normalizeBreaksToNewlines(s) {
     if (!hasValid(s)) return "";
     let t = String(s);
-
     t = t.replace(/&lt;\s*br\s*\/?\s*&gt;/gi, "\n");
     t = t.replace(/<\s*br\s*\/?\s*>/gi, "\n");
     t = t.replace(/\\n/g, "\n");
@@ -570,7 +626,6 @@
   function formatMulti(value) {
     if (!hasValid(value)) return "";
     const raw = normalizeBreaksToNewlines(value);
-
     return raw
       .split(/;|\n/)
       .map(s => s.trim())
@@ -608,6 +663,7 @@
     const s = String(line || "").trim();
     if (!s) return null;
 
+    // Label | URL
     let m = s.match(/^(.+?)\s*\|\s*(\S+)\s*$/);
     if (m) {
       const url = normalizeUrl_(m[2]);
@@ -615,6 +671,7 @@
       return { label: m[1].trim(), url };
     }
 
+    // Markdown [Label](URL)
     m = s.match(/^\[([^\]]+?)\]\(([^)]+)\)\s*$/);
     if (m) {
       const url = normalizeUrl_(m[2]);
@@ -622,6 +679,7 @@
       return { label: m[1].trim(), url };
     }
 
+    // URL only
     m = s.match(/^(\S+)$/);
     if (m) {
       const url = normalizeUrl_(m[1]);
@@ -629,6 +687,7 @@
       return { label: hostFromUrl_(url) || "Link", url };
     }
 
+    // Label + URL at end
     m = s.match(/^(.*?)(https?:\/\/\S+|www\.\S+)\s*$/i);
     if (m) {
       const url = normalizeUrl_(m[2]);
@@ -851,15 +910,33 @@
   }
 
   // =========================
-  // |||MOBILE SIDEBAR TOGGLE LOGIC|||
+  // MOBILE SIDEBAR TOGGLE LOGIC + HINT (shows every reload on mobile)
   // =========================
   const MOBILE_BREAKPOINT = 900;
   const sidebarEl = document.getElementById("sidebar");
   const sidebarToggleBtn = document.getElementById("sidebarToggle");
   const sidebarBackdropEl = document.getElementById("sidebarBackdrop");
+  const mobileHintEl = document.getElementById("mobileHint");
 
   function isMobileLayout() {
     return window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT}px)`).matches;
+  }
+
+  function showMobileHint() {
+    if (!mobileHintEl) return;
+    mobileHintEl.classList.add("open");
+    mobileHintEl.setAttribute("aria-hidden", "false");
+  }
+
+  function hideMobileHint() {
+    if (!mobileHintEl) return;
+    mobileHintEl.classList.remove("open");
+    mobileHintEl.setAttribute("aria-hidden", "true");
+  }
+
+  function maybeShowMobileHint() {
+    if (!isMobileLayout()) return;
+    showMobileHint(); // always on reload (mobile only)
   }
 
   function setSidebarOpen(open) {
@@ -883,12 +960,17 @@
   }
 
   sidebarToggleBtn.addEventListener("click", () => {
+    hideMobileHint(); // goes away after clicking the menu button
     const open = sidebarEl.classList.contains("open");
     setSidebarOpen(!open);
   });
 
   sidebarBackdropEl.addEventListener("click", () => setSidebarOpen(false));
-  window.addEventListener("resize", () => setSidebarOpen(false));
+
+  window.addEventListener("resize", () => {
+    hideMobileHint();
+    setSidebarOpen(false);
+  });
 
   // =========================
   // LOAD COUNTY CSV
@@ -1023,6 +1105,7 @@
 
     if (filtered.length === 0) {
       recordsEl.innerHTML = "<p>No data for this county yet.</p>";
+      setSidebarOpen(false);
       return;
     }
 
@@ -1090,6 +1173,7 @@
 
     if (filtered.length === 0) {
       stateRecordsEl.innerHTML = "<p>No state agency data for this state (for current filters).</p>";
+      setSidebarOpen(false);
       return;
     }
 
@@ -1194,7 +1278,7 @@
   }
 
   // =========================
-  // STATE STYLE
+  // STATE STYLE (FILL ONLY IN STATE MODE + FILTERING)
   // =========================
   function styleForStateFeature(feature) {
     const p = (feature && feature.properties) ? feature.properties : {};
@@ -1749,8 +1833,9 @@
       buildSearchIndex();
       initSearch();
 
-      // Mobile starts collapsed
+      // Mobile starts collapsed + shows hint every reload (mobile only)
       setSidebarOpen(false);
+      maybeShowMobileHint();
 
       setStatus("Data loaded. Click a county, or toggle State mode to click states.");
     } catch (err) {
