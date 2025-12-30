@@ -11,7 +11,7 @@
           integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
           crossorigin=""
   />
-  
+
   <script data-goatcounter="https://rdfmap.goatcounter.com/count"
           async src="https://gc.zgo.at/count.js"></script>
 
@@ -210,9 +210,7 @@
     .flagline { margin-top: 6px; }
     .flagline div { margin-top: 3px; }
 
-    /* =========================
-       NEW: Notes/Special Tactics link formatting
-       ========================= */
+    /* Notes/Special Tactics link formatting */
     .notes-block { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
     .note-line { line-height: 1.25; overflow-wrap: anywhere; word-break: break-word; }
     .note-link {
@@ -230,10 +228,99 @@
       font-weight: 500;
     }
     .note-text { white-space: normal; }
+
+    /* =========================
+       |||MOBILE: COLLAPSIBLE SIDEBAR (DRAWER) + TOGGLE BUTTON|||
+       ========================= */
+    #sidebarToggle {
+      position: fixed;
+      top: 12px;
+      right: 12px;   /* |||CHANGED: move to right||| */
+      left: auto;    /* |||CHANGED: clear left||| */
+      z-index: 1200;
+      display: none; /* shown on mobile only */
+      height: 42px;
+      width: 42px;
+      border-radius: 12px;
+      border: 1px solid #d6d6d6;
+      background: rgba(255,255,255,0.95);
+      box-shadow: 0 10px 22px rgba(0,0,0,0.12);
+      cursor: pointer;
+      user-select: none;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      line-height: 1;
+    }
+
+    #sidebarBackdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.35);
+      z-index: 1100;
+      display: none;
+    }
+    #sidebarBackdrop.open { display: block; }
+
+    @media (max-width: 900px) {
+      #app { display: block; }
+      #map { height: 100vh; width: 100vw; }
+
+      #sidebarToggle { display: inline-flex; }
+
+      /* |||MOBILE: slightly smaller filter buttons||| */
+      .filter-btn{
+        min-width: 46px;
+        height: 36px;
+        padding: 4px 7px 3px;
+        font-size: 10.5px;
+        border-radius: 9px;
+      }
+      .filter-btn .tick{
+        font-size: 11px;
+        line-height: 11px;
+        margin-top: 1px;
+      }
+      .ka-arrow{
+        width: 28px;
+        height: 36px;
+        font-size: 11px;
+        border-top-right-radius: 9px;
+        border-bottom-right-radius: 9px;
+      }
+      .ka-split .filter-btn{
+        border-top-right-radius: 0;
+        border-bottom-right-radius: 0;
+      }
+      .filter-row { gap: 5px; }
+
+      /* Drawer-style sidebar overlay */
+      #sidebar {
+        position: fixed;
+        top: 0;
+        right: 0;
+        height: 100vh;
+        width: min(460px, 92vw);
+        max-width: 92vw;
+        z-index: 1150;
+        border-left: none;
+        box-shadow: 0 18px 38px rgba(0,0,0,0.18);
+        transform: translateX(105%);
+        transition: transform 180ms ease;
+      }
+      #sidebar.open { transform: translateX(0); }
+
+      body.no-scroll { overflow: hidden; }
+    }
   </style>
 </head>
 
 <body>
+
+<!-- |||MOBILE: TOGGLE + BACKDROP||| -->
+<button id="sidebarToggle" type="button" aria-label="Open sidebar" aria-expanded="false">☰</button>
+<div id="sidebarBackdrop" aria-hidden="true"></div>
+
 <div id="app">
   <div id="map"></div>
 
@@ -474,11 +561,8 @@
     if (!hasValid(s)) return "";
     let t = String(s);
 
-    // Handle both real <br> and escaped &lt;br&gt; forms
     t = t.replace(/&lt;\s*br\s*\/?\s*&gt;/gi, "\n");
     t = t.replace(/<\s*br\s*\/?\s*>/gi, "\n");
-
-    // Handle literal "\n" sequences
     t = t.replace(/\\n/g, "\n");
     return t;
   }
@@ -496,12 +580,7 @@
   }
 
   // =========================
-  // NEW: Notes/Special tactics formatting with clickable links
-  // Supports:
-  // - "Label | https://..."
-  // - "[Label](https://...)"
-  // - "Label https://..."
-  // - "https://..."
+  // Notes/Special tactics formatting with clickable links
   // =========================
   function normalizeUrl_(raw) {
     let u = String(raw || "").trim();
@@ -529,7 +608,6 @@
     const s = String(line || "").trim();
     if (!s) return null;
 
-    // Label | URL
     let m = s.match(/^(.+?)\s*\|\s*(\S+)\s*$/);
     if (m) {
       const url = normalizeUrl_(m[2]);
@@ -537,7 +615,6 @@
       return { label: m[1].trim(), url };
     }
 
-    // Markdown [Label](URL)
     m = s.match(/^\[([^\]]+?)\]\(([^)]+)\)\s*$/);
     if (m) {
       const url = normalizeUrl_(m[2]);
@@ -545,7 +622,6 @@
       return { label: m[1].trim(), url };
     }
 
-    // URL only
     m = s.match(/^(\S+)$/);
     if (m) {
       const url = normalizeUrl_(m[1]);
@@ -553,7 +629,6 @@
       return { label: hostFromUrl_(url) || "Link", url };
     }
 
-    // Label + URL at end
     m = s.match(/^(.*?)(https?:\/\/\S+|www\.\S+)\s*$/i);
     if (m) {
       const url = normalizeUrl_(m[2]);
@@ -776,6 +851,46 @@
   }
 
   // =========================
+  // |||MOBILE SIDEBAR TOGGLE LOGIC|||
+  // =========================
+  const MOBILE_BREAKPOINT = 900;
+  const sidebarEl = document.getElementById("sidebar");
+  const sidebarToggleBtn = document.getElementById("sidebarToggle");
+  const sidebarBackdropEl = document.getElementById("sidebarBackdrop");
+
+  function isMobileLayout() {
+    return window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT}px)`).matches;
+  }
+
+  function setSidebarOpen(open) {
+    if (!isMobileLayout()) {
+      sidebarEl.classList.remove("open");
+      sidebarBackdropEl.classList.remove("open");
+      document.body.classList.remove("no-scroll");
+      sidebarToggleBtn.setAttribute("aria-expanded", "false");
+      sidebarToggleBtn.setAttribute("aria-label", "Open sidebar");
+      return;
+    }
+
+    sidebarEl.classList.toggle("open", !!open);
+    sidebarBackdropEl.classList.toggle("open", !!open);
+    document.body.classList.toggle("no-scroll", !!open);
+
+    sidebarToggleBtn.setAttribute("aria-expanded", open ? "true" : "false");
+    sidebarToggleBtn.setAttribute("aria-label", open ? "Close sidebar" : "Open sidebar");
+
+    if (map) setTimeout(() => map.invalidateSize(), 0);
+  }
+
+  sidebarToggleBtn.addEventListener("click", () => {
+    const open = sidebarEl.classList.contains("open");
+    setSidebarOpen(!open);
+  });
+
+  sidebarBackdropEl.addEventListener("click", () => setSidebarOpen(false));
+  window.addEventListener("resize", () => setSidebarOpen(false));
+
+  // =========================
   // LOAD COUNTY CSV
   // =========================
   async function loadCountyCsv() {
@@ -919,9 +1034,7 @@
       const kVal  = hasValid(row["K_band"])  ? formatMulti(row["K_band"])  : "";
       const lidar = hasValid(row["Lidar_Guns"]) ? formatMulti(row["Lidar_Guns"]) : "";
 
-      // ✅ NEW: notes/tactics render with clickable links
       const tactics = hasValid(row["Special_Tactics"]) ? formatNotesWithLinks(row["Special_Tactics"]) : "";
-
       const flags = flagsHtmlFromRow(row);
 
       let bandsHtml = "";
@@ -943,6 +1056,8 @@
       `;
       recordsEl.appendChild(div);
     });
+
+    setSidebarOpen(false);
   }
 
   function popupHtml(props) {
@@ -993,7 +1108,6 @@
       const kVal  = hasValid(row["K_band"])  ? formatMulti(row["K_band"])  : "";
       const lidar = hasValid(row["Lidar_Guns"]) ? formatMulti(row["Lidar_Guns"]) : "";
 
-      // ✅ NEW: notes/tactics render with clickable links
       const tactics = hasValid(row["Special_Tactics"]) ? formatNotesWithLinks(row["Special_Tactics"]) : "";
       const notes = hasValid(row["Notes"]) ? formatNotesWithLinks(row["Notes"]) : "";
 
@@ -1019,6 +1133,8 @@
       `;
       stateRecordsEl.appendChild(div);
     });
+
+    setSidebarOpen(false);
   }
 
   // =========================
@@ -1078,7 +1194,7 @@
   }
 
   // =========================
-  // STATE STYLE (FILL ONLY IN STATE MODE + FILTERING)
+  // STATE STYLE
   // =========================
   function styleForStateFeature(feature) {
     const p = (feature && feature.properties) ? feature.properties : {};
@@ -1632,6 +1748,9 @@
 
       buildSearchIndex();
       initSearch();
+
+      // Mobile starts collapsed
+      setSidebarOpen(false);
 
       setStatus("Data loaded. Click a county, or toggle State mode to click states.");
     } catch (err) {
