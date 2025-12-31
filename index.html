@@ -20,6 +20,7 @@
     #app { display: flex; height: 100vh; width: 100vw; }
     #map { flex: 2; min-width: 0; }
 
+    /* Sidebar: cleaner */
     #sidebar {
       flex: 1;
       max-width: 460px;
@@ -83,6 +84,7 @@
 
     .filter-btn.active { background: #222; color: #fff; border-color: #222; }
     .filter-btn.active .tick { visibility: visible; }
+
     .filter-btn.disabled { opacity: 0.45; cursor: not-allowed; }
 
     .ka-split{
@@ -208,6 +210,7 @@
     .flagline { margin-top: 6px; }
     .flagline div { margin-top: 3px; }
 
+    /* Notes/Special Tactics link formatting */
     .notes-block { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
     .note-line { line-height: 1.25; overflow-wrap: anywhere; word-break: break-word; }
     .note-link {
@@ -226,14 +229,16 @@
     }
     .note-text { white-space: normal; }
 
-    /* MOBILE */
+    /* =========================
+       MOBILE: COLLAPSIBLE SIDEBAR (DRAWER) + TOGGLE BUTTON
+       ========================= */
     #sidebarToggle {
       position: fixed;
       top: 12px;
       right: 12px;
       left: auto;
       z-index: 1200;
-      display: none;
+      display: none; /* shown on mobile only */
       height: 42px;
       width: 42px;
       border-radius: 12px;
@@ -257,6 +262,7 @@
     }
     #sidebarBackdrop.open { display: block; }
 
+    /* Mobile hint bubble */
     #mobileHint{
       position: fixed;
       top: 62px;
@@ -286,6 +292,7 @@
       line-height: 1.25;
     }
 
+    /* arrow pointing at menu */
     #mobileHint::before{
       content: "";
       position: absolute;
@@ -312,8 +319,10 @@
     @media (max-width: 900px) {
       #app { display: block; }
       #map { height: 100vh; width: 100vw; }
+
       #sidebarToggle { display: inline-flex; }
 
+      /* smaller filter buttons on mobile */
       .filter-btn{
         min-width: 46px;
         height: 36px;
@@ -339,6 +348,7 @@
       }
       .filter-row { gap: 5px; }
 
+      /* Drawer-style sidebar overlay */
       #sidebar {
         position: fixed;
         top: 0;
@@ -360,6 +370,7 @@
 </head>
 
 <body>
+<!-- MOBILE: TOGGLE + BACKDROP + HINT -->
 <button id="sidebarToggle" type="button" aria-label="Open sidebar" aria-expanded="false">☰</button>
 <div id="sidebarBackdrop" aria-hidden="true"></div>
 <div id="mobileHint" aria-hidden="true">
@@ -378,7 +389,7 @@
 
     <div class="panel">
       <div class="search-wrap">
-        <input id="searchInput" class="search-input" placeholder="Search county / agency / state patrol…" />
+        <input id="searchInput" class="search-input" placeholder="Search county / agency / state patrol / Canada province…" />
       </div>
       <div id="searchResults" class="search-results"></div>
     </div>
@@ -436,7 +447,7 @@
     </div>
 
     <div class="panel" id="countyPanel">
-      <h2>Selected County</h2>
+      <h2>Selected Region</h2>
       <div id="county-name">None selected</div>
 
       <div style="height:10px;"></div>
@@ -466,6 +477,9 @@
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 <script src="https://unpkg.com/leaflet.vectorgrid@1.3.0/dist/Leaflet.VectorGrid.bundled.js"></script>
 
+<!-- used to dissolve Canada census divisions into provinces (thick borders like US states) -->
+<script src="https://cdn.jsdelivr.net/npm/polygon-clipping@0.15.7/dist/polygon-clipping.umd.js"></script>
+
 <script>
   // =========================
   // CONFIG
@@ -477,8 +491,8 @@
     "https://docs.google.com/spreadsheets/d/e/2PACX-1vR4ZdepcnMW0OCvCvgRTWPFGSuaQ6u75caFu8zF_Sh-VY525EwU81XzaiJhnvQTCcfHndclCHAQv9DT/pub?gid=507352241&single=true&output=csv";
 
   const GEOJSON_URL = "./allCounties.json";
+  const CANADA_GEOJSON_URL = "./Canada.json";
   const STATE_BORDERS_URL = "./StateBorders.json";
-  const CANADA_BORDERS_URL = "./Canada.json"; // only file you said exists
 
   const DEFAULT_CENTER = [39.5, -98.35];
   const DEFAULT_ZOOM = 4;
@@ -495,25 +509,25 @@
     VA:"Virginia", WA:"Washington", WV:"West Virginia", WI:"Wisconsin", WY:"Wyoming", DC:"District of Columbia"
   };
 
-  // Canada province/territory codes (StatsCan PRUID -> abbrev + name)
-  const CA_PROV_ABBR = {
-    "10":"NL","11":"PE","12":"NS","13":"NB","24":"QC","35":"ON","46":"MB","47":"SK","48":"AB","59":"BC","60":"YT","61":"NT","62":"NU"
+  // Canada PRUID codes (used as GEOID in sheet as "CA-##")
+  const CA_PROV_INFO = {
+    "10": { abbr:"NL", name:"Newfoundland and Labrador" },
+    "11": { abbr:"PE", name:"Prince Edward Island" },
+    "12": { abbr:"NS", name:"Nova Scotia" },
+    "13": { abbr:"NB", name:"New Brunswick" },
+    "24": { abbr:"QC", name:"Quebec" },
+    "35": { abbr:"ON", name:"Ontario" },
+    "46": { abbr:"MB", name:"Manitoba" },
+    "47": { abbr:"SK", name:"Saskatchewan" },
+    "48": { abbr:"AB", name:"Alberta" },
+    "59": { abbr:"BC", name:"British Columbia" },
+    "60": { abbr:"YT", name:"Yukon" },
+    "61": { abbr:"NT", name:"Northwest Territories" },
+    "62": { abbr:"NU", name:"Nunavut" }
   };
-  const CA_PROV_NAME = {
-    "10":"Newfoundland and Labrador",
-    "11":"Prince Edward Island",
-    "12":"Nova Scotia",
-    "13":"New Brunswick",
-    "24":"Quebec",
-    "35":"Ontario",
-    "46":"Manitoba",
-    "47":"Saskatchewan",
-    "48":"Alberta",
-    "59":"British Columbia",
-    "60":"Yukon",
-    "61":"Northwest Territories",
-    "62":"Nunavut"
-  };
+
+  const CA_KEY_BY_ABBR = Object.fromEntries(Object.entries(CA_PROV_INFO).map(([k,v]) => [v.abbr, k]));
+  const CA_KEY_BY_NAME = Object.fromEntries(Object.entries(CA_PROV_INFO).map(([k,v]) => [v.name.toLowerCase(), k]));
 
   // =========================
   // KA FREQ KEYWORDS
@@ -533,16 +547,13 @@
   // =========================
   // STATE
   // =========================
-  let map, vgLayer, geojsonCache;
+  let map, vgLayer, usGeojsonCache;
   let statesLayer = null;
   let statesGeoCache = null;
 
-  // Canada layer (thick borders like US states)
+  // Canada provinces layer (thick borders)
   let canadaLayer = null;
-  let canadaGeoCache = null;
-  let selectedCanadaLeafletLayer = null;
-  let canadaLoaded = false;
-  let canadaFeatureCount = 0;
+  let canadaProvincesCache = null;
 
   let stateMode = false;
 
@@ -559,7 +570,7 @@
   let savedAllMode = true;
   let savedSelectedFilters = new Set(FILTERS);
 
-  // County data
+  // Region data (US counties + Canada provinces)
   const rowsByGeoid = new Map();
   const hasX = new Set();
   const hasK = new Set();
@@ -585,9 +596,9 @@
   const stateHasKa347 = new Set();
   const stateHasKa355 = new Set();
 
-  // Lookups for zooming / search
-  const countyPropsByGeoid = new Map();
-  const countyBoundsByGeoid = new Map();
+  // Lookups for zooming / search (US + Canada)
+  const regionPropsByKey = new Map();   // key -> props
+  const regionBoundsByKey = new Map();  // key -> LatLngBounds
 
   const statePropsByAbbrev = new Map();
   const stateBoundsByAbbrev = new Map();
@@ -595,10 +606,17 @@
   // Search index
   let searchIndex = [];
 
+  // Canada load info
+  let canadaLoaded = false;
+  let canadaDivCount = 0;
+  let canadaProvCount = 0;
+
   // =========================
-  // HELPERS
+  // HELPERS (SAFE HTML + BR FIX)
   // =========================
-  function setStatus(msg) { document.getElementById("status").textContent = msg; }
+  function setStatus(msg) {
+    document.getElementById("status").textContent = msg;
+  }
 
   function hasValid(v) {
     if (v === undefined || v === null) return false;
@@ -649,27 +667,36 @@
       .join("<br>");
   }
 
+  // =========================
+  // Notes/Special tactics formatting with clickable links
+  // =========================
   function normalizeUrl_(raw) {
     let u = String(raw || "").trim();
     if (!u) return "";
+
     if (/^www\./i.test(u)) u = "https://" + u;
     u = u.replace(/[)\],.]+$/g, "");
+
     try {
       const parsed = new URL(u);
       if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return "";
       return parsed.href;
-    } catch { return ""; }
+    } catch {
+      return "";
+    }
   }
 
   function hostFromUrl_(u) {
-    try { return new URL(u).hostname.replace(/^www\./i, ""); }
-    catch { return ""; }
+    try {
+      return new URL(u).hostname.replace(/^www\./i, "");
+    } catch { return ""; }
   }
 
   function parseLinkLine_(line) {
     const s = String(line || "").trim();
     if (!s) return null;
 
+    // Label | URL
     let m = s.match(/^(.+?)\s*\|\s*(\S+)\s*$/);
     if (m) {
       const url = normalizeUrl_(m[2]);
@@ -677,6 +704,7 @@
       return { label: m[1].trim(), url };
     }
 
+    // Markdown [Label](URL)
     m = s.match(/^\[([^\]]+?)\]\(([^)]+)\)\s*$/);
     if (m) {
       const url = normalizeUrl_(m[2]);
@@ -684,6 +712,7 @@
       return { label: m[1].trim(), url };
     }
 
+    // URL only
     m = s.match(/^(\S+)$/);
     if (m) {
       const url = normalizeUrl_(m[1]);
@@ -691,6 +720,7 @@
       return { label: hostFromUrl_(url) || "Link", url };
     }
 
+    // Label + URL at end
     m = s.match(/^(.*?)(https?:\/\/\S+|www\.\S+)\s*$/i);
     if (m) {
       const url = normalizeUrl_(m[2]);
@@ -704,8 +734,13 @@
 
   function formatNotesWithLinks(value) {
     if (!hasValid(value)) return "";
+
     const raw = normalizeBreaksToNewlines(value);
-    const parts = raw.split(/;|\n/).map(s => s.trim()).filter(Boolean);
+    const parts = raw
+      .split(/;|\n/)
+      .map(s => s.trim())
+      .filter(Boolean);
+
     if (parts.length === 0) return "";
 
     const linesHtml = parts.map(p => {
@@ -742,7 +777,10 @@
   function containsDE(val) {
     if (!hasValid(val)) return false;
     const s = String(val);
-    return (/\bDE[A-Z0-9_-]*\b/i.test(s) || /\bdragon\s*eye\b/i.test(s));
+    return (
+      /\bDE[A-Z0-9_-]*\b/i.test(s) ||
+      /\bdragon\s*eye\b/i.test(s)
+    );
   }
 
   function matchAnyRegex(text, regexList) {
@@ -759,9 +797,11 @@
     };
   }
 
-  function normalizeGeoid(v) {
+  // ===== US GEOID NORMALIZER (5-digit FIPS) =====
+  function normalizeUsGeoid(v) {
     let t = String(v ?? "").trim();
     if (!t) return "";
+
     if (/^\d{5}$/.test(t)) return t;
 
     if (/^\d+(\.\d+)?$/.test(t)) {
@@ -779,46 +819,86 @@
       const maybe = digits.slice(0, 5);
       if (/^\d{5}$/.test(maybe)) return maybe;
     }
+
     return "";
   }
 
-  // Canada detection + name from PRUID (works for dissolved provinces)
-  function isCanadaProps(p) {
-    return !!(p && (p.PRUID || p.pruid));
-  }
-
-  function canadaPrFromProps(p) {
-    const pr = String(p?.PRUID ?? p?.pruid ?? "").trim();
-    return pr ? pr.padStart(2, "0") : "";
-  }
-
-  function canadaProvAbbrevFromProps(p) {
-    const pr = canadaPrFromProps(p);
-    return pr ? (CA_PROV_ABBR[pr] || "") : "";
-  }
-
-  function canadaProvNameFromProps(p) {
-    const pr = canadaPrFromProps(p);
-    if (hasValid(p?.PRNAME)) return String(p.PRNAME).trim();
-    if (hasValid(p?.prname)) return String(p.prname).trim();
-    if (pr && CA_PROV_NAME[pr]) return CA_PROV_NAME[pr];
-    // fallback for non-dissolved files
-    if (hasValid(p?.CDNAME)) return String(p.CDNAME).trim();
-    if (hasValid(p?.cdname)) return String(p.cdname).trim();
-    return "Unknown";
-  }
-
-  function getCountyDisplayNameFromProps(p) {
-    if (isCanadaProps(p)) return canadaProvNameFromProps(p);
-    return String(p?.NAME || p?.name || p?.NAMELSAD || "Unknown").trim();
-  }
-
-  function getCountyRegionTagFromProps(p) {
-    if (isCanadaProps(p)) {
-      const ab = canadaProvAbbrevFromProps(p);
-      return ab || "CA";
+  // ===== CANADA PROVINCE KEY NORMALIZER (CA-##) =====
+  function normalizeCanadaPruid2(v) {
+    const raw = String(v ?? "").trim();
+    if (!raw) return "";
+    // IMPORTANT: do NOT slice last 2 digits; only accept clean 1–2 digit PRUID
+    if (/^\d{1,2}$/.test(raw)) return raw.padStart(2, "0");
+    const digits = raw.replace(/\D/g, "");
+    if (/^\d{1,2}$/.test(digits) && digits.length === raw.replace(/\s/g,"").length) {
+      return digits.padStart(2,"0");
     }
-    return String(p?.STUSPS || p?.STATE_NAME || p?.state || p?.STATE || "").trim();
+    return "";
+  }
+
+  function normalizeCanadaKeyFromSheet(geo, stateMaybe, nameMaybe) {
+    const state = String(stateMaybe ?? "").trim().toUpperCase();
+    const t0 = String(geo ?? "").trim();
+
+    // If they already entered CA-##
+    if (/^CA-\d{1,2}$/i.test(t0)) {
+      const pr = t0.split("-")[1];
+      return "CA-" + String(pr).padStart(2, "0");
+    }
+
+    // Only treat as Canada if State says CANADA (prevents false parsing)
+    if (state !== "CANADA") return "";
+
+    // allow plain PRUID like "10"
+    if (/^\d{1,2}$/.test(t0)) return "CA-" + t0.padStart(2, "0");
+
+    // allow province abbrev like "ON" (only because State=CANADA)
+    const ab = t0.toUpperCase();
+    if (CA_KEY_BY_ABBR[ab]) return "CA-" + CA_KEY_BY_ABBR[ab].padStart(2,"0");
+
+    // allow province name in GEOID cell
+    const nm = t0.toLowerCase();
+    if (CA_KEY_BY_NAME[nm]) return "CA-" + CA_KEY_BY_NAME[nm].padStart(2,"0");
+
+    // allow province name in Name cell (if GEOID cell blank/messy)
+    const nm2 = String(nameMaybe ?? "").trim().toLowerCase();
+    if (CA_KEY_BY_NAME[nm2]) return "CA-" + CA_KEY_BY_NAME[nm2].padStart(2,"0");
+
+    return "";
+  }
+
+  function isCanadaProps(p) {
+    if (!p) return false;
+    if (String(p.COUNTRY || "").toUpperCase() === "CANADA") return true;
+    if (p.PRUID !== undefined && p.PRUID !== null) return true;
+    if (String(p.GEOID || "").toUpperCase().startsWith("CA-")) return true;
+    return false;
+  }
+
+  function regionKeyFromProps(p) {
+    if (!p) return "";
+    if (isCanadaProps(p)) {
+      const pr = normalizeCanadaPruid2(p.PRUID) || normalizeCanadaPruid2(String(p.GEOID || "").replace(/^CA-/i,""));
+      if (!pr) return "";
+      return "CA-" + pr;
+    }
+    return normalizeUsGeoid(p.GEOID || p.geoid || p.GEOID10 || p.GEO_ID || "");
+  }
+
+  function getRegionDisplayNameFromProps(p) {
+    if (!p) return "Unknown";
+    if (isCanadaProps(p)) {
+      const pr = normalizeCanadaPruid2(p.PRUID);
+      const info = pr ? CA_PROV_INFO[pr] : null;
+      return String(p.NAME || (info ? info.name : "") || "Unknown").trim();
+    }
+    return String(p.NAME || p.name || p.NAMELSAD || "Unknown").trim();
+  }
+
+  function getRegionTagFromProps(p) {
+    if (!p) return "";
+    if (isCanadaProps(p)) return "CANADA";
+    return String(p.STUSPS || p.STATE_NAME || p.state || p.STATE || "").trim();
   }
 
   function normalizeStateAbbrev(v) {
@@ -886,20 +966,20 @@
     return (d.f338 || d.f347 || d.f355);
   }
 
-  function countyMatchesFilterSet(geoid, f) {
-    if (f === "x") return hasX.has(geoid);
-    if (f === "k") return hasK.has(geoid);
-    if (f === "ka") return hasKa.has(geoid);
-    if (f === "lidar") return hasLidar.has(geoid);
-    if (f === "de") return hasDE.has(geoid);
+  function regionMatchesFilterSet(key, f) {
+    if (f === "x") return hasX.has(key);
+    if (f === "k") return hasK.has(key);
+    if (f === "ka") return hasKa.has(key);
+    if (f === "lidar") return hasLidar.has(key);
+    if (f === "de") return hasDE.has(key);
     return false;
   }
 
-  function countyMatchesKaFreqSet(geoid, choice) {
-    if (choice === "33.8") return hasKa338.has(geoid);
-    if (choice === "34.7") return hasKa347.has(geoid);
-    if (choice === "35.5") return hasKa355.has(geoid);
-    return (hasKa338.has(geoid) || hasKa347.has(geoid) || hasKa355.has(geoid));
+  function regionMatchesKaFreqSet(key, choice) {
+    if (choice === "33.8") return hasKa338.has(key);
+    if (choice === "34.7") return hasKa347.has(key);
+    if (choice === "35.5") return hasKa355.has(key);
+    return (hasKa338.has(key) || hasKa347.has(key) || hasKa355.has(key));
   }
 
   function stateMatchesFilterSet(ab, f) {
@@ -942,7 +1022,7 @@
   }
 
   // =========================
-  // MOBILE SIDEBAR
+  // MOBILE SIDEBAR TOGGLE LOGIC + HINT (shows every reload on mobile)
   // =========================
   const MOBILE_BREAKPOINT = 900;
   const sidebarEl = document.getElementById("sidebar");
@@ -950,7 +1030,9 @@
   const sidebarBackdropEl = document.getElementById("sidebarBackdrop");
   const mobileHintEl = document.getElementById("mobileHint");
 
-  function isMobileLayout() { return window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT}px)`).matches; }
+  function isMobileLayout() {
+    return window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT}px)`).matches;
+  }
 
   function showMobileHint() {
     if (!mobileHintEl) return;
@@ -1003,7 +1085,7 @@
   });
 
   // =========================
-  // LOAD CSVs
+  // LOAD COUNTY/REGION CSV (US counties + Canada provinces)
   // =========================
   async function loadCountyCsv() {
     const res = await fetch(COUNTY_CSV_URL);
@@ -1020,8 +1102,20 @@
     for (const raw of parsed.data) {
       if (!raw) continue;
 
-      const geoid = normalizeGeoid(raw.GEOID);
-      if (!geoid) continue;
+      const stateCell = getField(raw, "State", "STATE", "Country", "COUNTRY");
+      const nameCell  = getField(raw, "County", "County_Name", "Province", "Province_Name", "Name");
+
+      // Canada rows: State=CANADA OR GEOID="CA-##"
+      const caKey = normalizeCanadaKeyFromSheet(raw.GEOID, stateCell, nameCell);
+
+      let key = "";
+      if (caKey) {
+        key = caKey;
+      } else {
+        key = normalizeUsGeoid(raw.GEOID);
+      }
+
+      if (!key) continue;
 
       const row = {};
       for (const k of Object.keys(raw)) {
@@ -1029,27 +1123,30 @@
         row[k.trim()] = (raw[k] ?? "").toString().trim();
       }
 
-      if (!rowsByGeoid.has(geoid)) rowsByGeoid.set(geoid, []);
-      rowsByGeoid.get(geoid).push(row);
+      if (!rowsByGeoid.has(key)) rowsByGeoid.set(key, []);
+      rowsByGeoid.get(key).push(row);
 
-      if (hasValid(row["X_band"])) hasX.add(geoid);
-      if (hasValid(row["K_band"])) hasK.add(geoid);
+      if (hasValid(row["X_band"])) hasX.add(key);
+      if (hasValid(row["K_band"])) hasK.add(key);
 
       if (hasValid(row["Ka_band"])) {
-        hasKa.add(geoid);
+        hasKa.add(key);
         const d = detectKaFreqsFromText(row["Ka_band"]);
-        if (d.f338) hasKa338.add(geoid);
-        if (d.f347) hasKa347.add(geoid);
-        if (d.f355) hasKa355.add(geoid);
+        if (d.f338) hasKa338.add(key);
+        if (d.f347) hasKa347.add(key);
+        if (d.f355) hasKa355.add(key);
       }
 
-      if (hasValid(row["Lidar_Guns"])) hasLidar.add(geoid);
-      if (containsDE(row["Lidar_Guns"])) hasDE.add(geoid);
+      if (hasValid(row["Lidar_Guns"])) hasLidar.add(key);
+      if (containsDE(row["Lidar_Guns"])) hasDE.add(key);
 
-      if (rowHasAnyContent(row)) hasAnyData.add(geoid);
+      if (rowHasAnyContent(row)) hasAnyData.add(key);
     }
   }
 
+  // =========================
+  // LOAD STATE AGENCY CSV
+  // =========================
   async function loadStateAgencyCsv() {
     const res = await fetch(STATE_AGENCY_CSV_URL);
     if (!res.ok) throw new Error("State Agency CSV fetch failed: " + res.status);
@@ -1114,31 +1211,30 @@
   }
 
   // =========================
-  // COUNTY RENDER (US + CANADA)
+  // REGION RENDER (US county OR Canada province)
   // =========================
-  function renderCountyInfo(props) {
-    const countyNameEl = document.getElementById("county-name");
+  function renderRegionInfo(props) {
+    const nameEl = document.getElementById("county-name");
     const recordsEl = document.getElementById("records");
 
-    const name = getCountyDisplayNameFromProps(props);
-    const tag = getCountyRegionTagFromProps(props);
+    const name = getRegionDisplayNameFromProps(props);
+    const tag = getRegionTagFromProps(props);
+    const key = regionKeyFromProps(props);
 
-    countyNameEl.textContent = tag ? `${name}, ${tag}` : name;
+    nameEl.textContent = tag ? `${name}, ${tag}` : name;
     recordsEl.innerHTML = "";
 
-    // Canada: only show province name (no data wiring yet)
-    if (isCanadaProps(props)) {
-      recordsEl.innerHTML = "<p>Canada province boundary only (no data yet).</p>";
+    if (!key) {
+      recordsEl.innerHTML = "<p>No region key found.</p>";
       setSidebarOpen(false);
       return;
     }
 
-    const geoid = normalizeGeoid(props.GEOID || props.geoid || props.GEOID10 || props.GEO_ID || "");
-    const all = rowsByGeoid.get(geoid) || [];
+    const all = rowsByGeoid.get(key) || [];
     const filtered = all.filter(passesCurrentFilters);
 
     if (filtered.length === 0) {
-      recordsEl.innerHTML = "<p>No data for this county yet.</p>";
+      recordsEl.innerHTML = "<p>No data for this region yet.</p>";
       setSidebarOpen(false);
       return;
     }
@@ -1177,22 +1273,412 @@
     setSidebarOpen(false);
   }
 
-  function popupHtml(props) {
-    const name = getCountyDisplayNameFromProps(props);
-    const tag = getCountyRegionTagFromProps(props);
+  function popupHtmlForRegion(props) {
+    const name = getRegionDisplayNameFromProps(props);
+    const tag = getRegionTagFromProps(props);
+    const key = regionKeyFromProps(props);
 
-    if (isCanadaProps(props)) {
-      return `<strong>${escapeHtml(tag ? `${name}, ${tag}` : name)}</strong><br>Canada province boundary (no data yet).`;
-    }
+    if (!key) return `<strong>${escapeHtml(tag ? `${name}, ${tag}` : name)}</strong>`;
 
-    const geoid = normalizeGeoid(props.GEOID || props.geoid || props.GEOID10 || props.GEO_ID || "");
-    const all = rowsByGeoid.get(geoid) || [];
+    const all = rowsByGeoid.get(key) || [];
     const row = all.find(passesCurrentFilters);
 
     if (!row) return `<strong>${escapeHtml(tag ? `${name}, ${tag}` : name)}</strong><br>No data for the selected filters.`;
 
     const agency = escapeHtml(row["Law_Enforcement_Agency_Name"] || "Unknown agency");
     return `<strong>${escapeHtml(tag ? `${name}, ${tag}` : name)}</strong><br>Main agency: ${agency}`;
+  }
+
+  // =========================
+  // US COUNTY STYLE (VectorGrid)
+  // =========================
+  function styleForUsCountyProps(props) {
+    const geoid = normalizeUsGeoid(props.GEOID || props.geoid || props.GEOID10 || props.GEO_ID || "");
+
+    const s = {
+      weight: 1.4,
+      color: "#111",
+      opacity: 1,
+      fill: true,
+      fillColor: "#f2f2f2",
+      fillOpacity: 0.20
+    };
+
+    if (!geoid) return s;
+
+    if (kaFreqMode) {
+      if (regionMatchesKaFreqSet(geoid, kaFreqChoice)) {
+        s.fillColor = "blue";
+        s.fillOpacity = 0.60;
+      }
+      return s;
+    }
+
+    if (allMode) {
+      if (hasAnyData.has(geoid)) {
+        s.fillColor = "#0B6623";
+        s.fillOpacity = 0.7;
+      }
+      return s;
+    }
+
+    if (selectedFilters.size === 0) return s;
+
+    const matches = [];
+    for (const f of FILTERS) {
+      if (!selectedFilters.has(f)) continue;
+      if (regionMatchesFilterSet(geoid, f)) matches.push(f);
+    }
+    if (matches.length === 0) return s;
+
+    const colorMap = { x:"gold", k:"orange", ka:"blue", lidar:"red", de:"purple" };
+
+    if (matches.length === 1) {
+      s.fillColor = colorMap[matches[0]] || "green";
+      s.fillOpacity = 0.50;
+      return s;
+    }
+
+    s.fillColor = "cyan";
+    s.fillOpacity = 0.55;
+    s.weight = 2.0;
+    return s;
+  }
+
+  // =========================
+  // CANADA PROVINCE STYLE (Thick borders like US states)
+  // =========================
+  function styleForCanadaProvinceFeature(feature) {
+    const p = (feature && feature.properties) ? feature.properties : {};
+    const key = regionKeyFromProps(p);
+
+    // thick outline always
+    const s = {
+      color: "#000",
+      weight: 4,
+      opacity: 0.9,
+      lineJoin: "round",
+      fill: true,
+      fillColor: "#000",
+      fillOpacity: 0.0
+    };
+
+    // clickable only in county mode
+    if (stateMode) return s;
+
+    if (!key) return s;
+
+    if (kaFreqMode) {
+      if (regionMatchesKaFreqSet(key, kaFreqChoice)) {
+        s.fillColor = "blue";
+        s.fillOpacity = 0.35;
+      } else {
+        s.fillOpacity = 0.0;
+      }
+      return s;
+    }
+
+    if (allMode) {
+      if (hasAnyData.has(key)) {
+        s.fillColor = "#0B6623";
+        s.fillOpacity = 0.35;
+      }
+      return s;
+    }
+
+    if (selectedFilters.size === 0) return s;
+
+    const matches = [];
+    for (const f of FILTERS) {
+      if (!selectedFilters.has(f)) continue;
+      if (regionMatchesFilterSet(key, f)) matches.push(f);
+    }
+
+    if (matches.length === 0) {
+      s.fillOpacity = 0.0;
+      return s;
+    }
+
+    const colorMap = { x:"gold", k:"orange", ka:"blue", lidar:"red", de:"purple" };
+
+    if (matches.length === 1) {
+      s.fillColor = colorMap[matches[0]] || "green";
+      s.fillOpacity = 0.35;
+      return s;
+    }
+
+    s.fillColor = "cyan";
+    s.fillOpacity = 0.38;
+    return s;
+  }
+
+  function refreshCanadaStyle() {
+    if (!canadaLayer) return;
+    canadaLayer.setStyle(f => styleForCanadaProvinceFeature(f));
+  }
+
+  // =========================
+  // STATE STYLE (FILL ONLY IN STATE MODE + FILTERING)
+  // =========================
+  function styleForStateFeature(feature) {
+    const p = (feature && feature.properties) ? feature.properties : {};
+    const ab = getStateAbbrevFromProps(p);
+
+    const s = {
+      color: "#000",
+      weight: 4,
+      opacity: 0.9,
+      fill: true,
+      fillOpacity: 0.0,
+      fillColor: "#000"
+    };
+
+    if (!stateMode) return s;
+    if (!kaFreqMode && allMode) return s;
+    if (!ab) return s;
+
+    if (kaFreqMode) {
+      if (stateMatchesKaFreqSet(ab, kaFreqChoice)) {
+        s.fillColor = "blue";
+        s.fillOpacity = 0.35;
+      } else {
+        s.fillOpacity = 0.0;
+      }
+      return s;
+    }
+
+    if (selectedFilters.size === 0) return s;
+
+    const matches = [];
+    for (const f of FILTERS) {
+      if (!selectedFilters.has(f)) continue;
+      if (stateMatchesFilterSet(ab, f)) matches.push(f);
+    }
+
+    if (matches.length === 0) {
+      s.fillOpacity = 0.0;
+      return s;
+    }
+
+    const colorMap = { x:"gold", k:"orange", ka:"blue", lidar:"red", de:"purple" };
+
+    if (matches.length === 1) {
+      s.fillColor = colorMap[matches[0]] || "green";
+      s.fillOpacity = 0.35;
+      return s;
+    }
+
+    s.fillColor = "cyan";
+    s.fillOpacity = 0.38;
+    return s;
+  }
+
+  function refreshStatesStyle() {
+    if (!statesLayer) return;
+    statesLayer.setStyle(f => styleForStateFeature(f));
+  }
+
+  // =========================
+  // BUILD VECTORGRID (US COUNTIES ONLY)
+  // =========================
+  async function rebuildCountyLayer() {
+    if (!usGeojsonCache) return;
+    if (stateMode) return;
+
+    if (vgLayer) {
+      map.removeLayer(vgLayer);
+      vgLayer = null;
+      selectedId = null;
+    }
+
+    vgLayer = L.vectorGrid.slicer(usGeojsonCache, {
+      maxZoom: 12,
+      tolerance: 3,
+      extent: 4096,
+      buffer: 256,
+      rendererFactory: L.svg.tile,
+      pane: "countiesPane",
+      interactive: true,
+      getFeatureId: f => {
+        const p = (f && f.properties) ? f.properties : {};
+        return normalizeUsGeoid(p.GEOID || p.geoid || p.GEOID10 || p.GEO_ID || "");
+      },
+      vectorTileLayerStyles: { sliced: props => styleForUsCountyProps(props) }
+    });
+
+    vgLayer.addTo(map);
+
+    vgLayer.on("click", (e) => {
+      if (stateMode) return;
+
+      const props =
+        (e && e.layer && e.layer.properties) ? e.layer.properties :
+        (e && e.properties) ? e.properties : {};
+
+      lastClickedProps = props;
+
+      const key = normalizeUsGeoid(props.GEOID || props.geoid || props.GEOID10 || props.GEO_ID || "");
+
+      if (selectedId) vgLayer.resetFeatureStyle(selectedId);
+      selectedId = key || null;
+
+      if (selectedId) {
+        const sel = styleForUsCountyProps(props);
+        sel.weight = 3;
+        sel.color = "#000";
+        vgLayer.setFeatureStyle(selectedId, sel);
+      }
+
+      renderRegionInfo(props);
+
+      L.popup()
+        .setLatLng(e.latlng)
+        .setContent(popupHtmlForRegion(props))
+        .openOn(map);
+    });
+  }
+
+  // =========================
+  // STATE BORDERS + CLICKABLE STATES
+  // =========================
+  async function addStatesLayer() {
+    const res = await fetch(STATE_BORDERS_URL);
+    if (!res.ok) throw new Error("StateBorders fetch failed: " + res.status);
+    statesGeoCache = await res.json();
+
+    map.createPane("statesPane");
+    map.getPane("statesPane").style.zIndex = 690;
+    map.getPane("popupPane").style.zIndex = 900;
+
+    if (statesLayer) map.removeLayer(statesLayer);
+
+    statesLayer = L.geoJSON(statesGeoCache, {
+      pane: "statesPane",
+      interactive: true,
+      style: (feature) => styleForStateFeature(feature),
+      onEachFeature: (feature, layer) => {
+        layer.on("click", (e) => {
+          if (!stateMode) return;
+
+          const p = (feature && feature.properties) ? feature.properties : {};
+          const ab = getStateAbbrevFromProps(p);
+          if (!ab) return;
+
+          lastClickedStateAbbrev = ab;
+          renderStateInfo(ab);
+
+          const stateName = getStateNameFromProps(p, ab);
+          const count = (rowsByState.get(ab) || []).filter(passesCurrentFilters).length;
+
+          L.popup()
+            .setLatLng(e.latlng)
+            .setContent(`<strong>${escapeHtml(stateName)} (${escapeHtml(ab)})</strong><br>${count} state record${count===1?"":"s"} found (current filters).`)
+            .openOn(map);
+        });
+      }
+    }).addTo(map);
+
+    setStateMode(stateMode, {skipRefresh:true});
+    refreshStatesStyle();
+  }
+
+  // =========================
+  // CANADA (dissolve divisions -> provinces) + clickable provinces
+  // =========================
+  function geomToMultiPolyCoords(geom) {
+    if (!geom) return null;
+    if (geom.type === "Polygon") return [geom.coordinates];
+    if (geom.type === "MultiPolygon") return geom.coordinates;
+    return null;
+  }
+
+  function dissolveCanadaToProvinces(caGeo) {
+    if (!caGeo || !Array.isArray(caGeo.features)) return null;
+
+    const groups = new Map(); // pruid(2-digit) -> multipolygon coords (polygon-clipping format)
+
+    for (const f of caGeo.features) {
+      const p = f.properties || {};
+      const pr = normalizeCanadaPruid2(p.PRUID);
+      if (!pr) continue;
+
+      const mp = geomToMultiPolyCoords(f.geometry);
+      if (!mp) continue;
+
+      // polygon-clipping: MultiPolygon coords
+      if (!groups.has(pr)) {
+        groups.set(pr, mp);
+      } else {
+        const acc = groups.get(pr);
+        try {
+          const merged = polygonClipping.union(acc, mp);
+          groups.set(pr, merged);
+        } catch (e) {
+          // if union fails on a weird geometry, fall back to concatenating (still works for fills)
+          groups.set(pr, acc.concat(mp));
+        }
+      }
+    }
+
+    const features = [];
+    for (const [pr, coords] of groups.entries()) {
+      const info = CA_PROV_INFO[pr] || { abbr: "", name: "" };
+      const key = "CA-" + pr;
+
+      features.push({
+        type: "Feature",
+        properties: {
+          COUNTRY: "CANADA",
+          PRUID: pr,
+          GEOID: key,
+          ABBR: info.abbr,
+          NAME: info.name || key
+        },
+        geometry: {
+          type: "MultiPolygon",
+          coordinates: coords
+        }
+      });
+    }
+
+    return { type: "FeatureCollection", features };
+  }
+
+  async function addCanadaLayer() {
+    // pane between counties and states
+    map.createPane("canadaPane");
+    map.getPane("canadaPane").style.zIndex = 680;
+
+    if (canadaLayer) map.removeLayer(canadaLayer);
+
+    if (!canadaProvincesCache || !Array.isArray(canadaProvincesCache.features)) return;
+
+    canadaLayer = L.geoJSON(canadaProvincesCache, {
+      pane: "canadaPane",
+      interactive: true,
+      style: (feature) => styleForCanadaProvinceFeature(feature),
+      onEachFeature: (feature, layer) => {
+        layer.on("click", (e) => {
+          if (stateMode) return; // "only for Canada" clicks in county mode
+
+          const p = (feature && feature.properties) ? feature.properties : {};
+          lastClickedProps = p;
+
+          renderRegionInfo(p);
+
+          const key = regionKeyFromProps(p);
+          const count = (rowsByGeoid.get(key) || []).filter(passesCurrentFilters).length;
+          const title = `${getRegionDisplayNameFromProps(p)}, CANADA`;
+
+          L.popup()
+            .setLatLng(e.latlng)
+            .setContent(`<strong>${escapeHtml(title)}</strong><br>${count} record${count===1?"":"s"} found (current filters).`)
+            .openOn(map);
+        });
+      }
+    }).addTo(map);
+
+    refreshCanadaStyle();
   }
 
   // =========================
@@ -1260,310 +1746,8 @@
   }
 
   // =========================
-  // COUNTY STYLE (US)
+  // MODE SWITCH
   // =========================
-  function styleForCountyProps(props) {
-    const geoid = normalizeGeoid(props.GEOID || props.geoid || props.GEOID10 || props.GEO_ID || "");
-
-    const s = {
-      weight: 1.4,
-      color: "#111",
-      opacity: 1,
-      fill: true,
-      fillColor: "#f2f2f2",
-      fillOpacity: 0.20
-    };
-
-    if (!geoid) return s;
-
-    if (kaFreqMode) {
-      if (countyMatchesKaFreqSet(geoid, kaFreqChoice)) {
-        s.fillColor = "blue";
-        s.fillOpacity = 0.60;
-      }
-      return s;
-    }
-
-    if (allMode) {
-      if (hasAnyData.has(geoid)) {
-        s.fillColor = "#0B6623";
-        s.fillOpacity = 0.7;
-      }
-      return s;
-    }
-
-    if (selectedFilters.size === 0) return s;
-
-    const matches = [];
-    for (const f of FILTERS) {
-      if (!selectedFilters.has(f)) continue;
-      if (countyMatchesFilterSet(geoid, f)) matches.push(f);
-    }
-    if (matches.length === 0) return s;
-
-    const colorMap = { x:"gold", k:"orange", ka:"blue", lidar:"red", de:"purple" };
-
-    if (matches.length === 1) {
-      s.fillColor = colorMap[matches[0]] || "green";
-      s.fillOpacity = 0.50;
-      return s;
-    }
-
-    s.fillColor = "cyan";
-    s.fillOpacity = 0.55;
-    s.weight = 2.0;
-    return s;
-  }
-
-  // =========================
-  // STATE STYLE
-  // =========================
-  function styleForStateFeature(feature) {
-    const p = (feature && feature.properties) ? feature.properties : {};
-    const ab = getStateAbbrevFromProps(p);
-
-    const s = {
-      color: "#000",
-      weight: 4,
-      opacity: 0.9,
-      fill: true,
-      fillOpacity: 0.0,
-      fillColor: "#000"
-    };
-
-    if (!stateMode) return s;
-    if (!kaFreqMode && allMode) return s;
-    if (!ab) return s;
-
-    if (kaFreqMode) {
-      if (stateMatchesKaFreqSet(ab, kaFreqChoice)) {
-        s.fillColor = "blue";
-        s.fillOpacity = 0.35;
-      } else {
-        s.fillOpacity = 0.0;
-      }
-      return s;
-    }
-
-    if (selectedFilters.size === 0) return s;
-
-    const matches = [];
-    for (const f of FILTERS) {
-      if (!selectedFilters.has(f)) continue;
-      if (stateMatchesFilterSet(ab, f)) matches.push(f);
-    }
-
-    if (matches.length === 0) {
-      s.fillOpacity = 0.0;
-      return s;
-    }
-
-    const colorMap = { x:"gold", k:"orange", ka:"blue", lidar:"red", de:"purple" };
-
-    if (matches.length === 1) {
-      s.fillColor = colorMap[matches[0]] || "green";
-      s.fillOpacity = 0.35;
-      return s;
-    }
-
-    s.fillColor = "cyan";
-    s.fillOpacity = 0.38;
-    return s;
-  }
-
-  function refreshStatesStyle() {
-    if (!statesLayer) return;
-    statesLayer.setStyle(f => styleForStateFeature(f));
-  }
-
-  // =========================
-  // CANADA STYLE (THICK LIKE US STATES)
-  // =========================
-  function styleForCanadaFeature(feature) {
-    return {
-      color: "#000",
-      weight: 4,          // thick border
-      opacity: 0.9,
-      fill: true,
-      fillOpacity: 0.0,   // no fill, just outline like state borders
-      fillColor: "#000"
-    };
-  }
-
-  function setCanadaInteractivity(on) {
-    if (!canadaLayer) return;
-    canadaLayer.eachLayer(layer => {
-      layer.options.interactive = !!on;
-      if (layer.getElement) {
-        const el = layer.getElement();
-        if (el) el.style.pointerEvents = on ? "auto" : "none";
-      }
-    });
-  }
-
-  // =========================
-  // BUILD VECTORGRID (US COUNTIES ONLY)
-  // =========================
-  async function rebuildCountyLayer() {
-    if (!geojsonCache) return;
-    if (stateMode) return;
-
-    if (vgLayer) {
-      map.removeLayer(vgLayer);
-      vgLayer = null;
-      selectedId = null;
-    }
-
-    vgLayer = L.vectorGrid.slicer(geojsonCache, {
-      maxZoom: 12,
-      tolerance: 3,
-      extent: 4096,
-      buffer: 256,
-      rendererFactory: L.svg.tile,
-      pane: "countiesPane",
-      interactive: true,
-      getFeatureId: f => {
-        const p = (f && f.properties) ? f.properties : {};
-        return normalizeGeoid(p.GEOID || p.geoid || p.GEOID10 || p.GEO_ID || "");
-      },
-      vectorTileLayerStyles: { sliced: props => styleForCountyProps(props) }
-    });
-
-    vgLayer.addTo(map);
-
-    vgLayer.on("click", (e) => {
-      if (stateMode) return;
-
-      const props =
-        (e && e.layer && e.layer.properties) ? e.layer.properties :
-        (e && e.properties) ? e.properties : {};
-
-      lastClickedProps = props;
-
-      const geoid = normalizeGeoid(props.GEOID || props.geoid || props.GEOID10 || props.GEO_ID || "");
-
-      if (selectedId) vgLayer.resetFeatureStyle(selectedId);
-      selectedId = geoid || null;
-
-      if (selectedId) {
-        const sel = styleForCountyProps(props);
-        sel.weight = 3;
-        sel.color = "#000";
-        vgLayer.setFeatureStyle(selectedId, sel);
-      }
-
-      renderCountyInfo(props);
-
-      L.popup()
-        .setLatLng(e.latlng)
-        .setContent(popupHtml(props))
-        .openOn(map);
-    });
-  }
-
-  // =========================
-  // STATE BORDERS
-  // =========================
-  async function addStatesLayer() {
-    const res = await fetch(STATE_BORDERS_URL);
-    if (!res.ok) throw new Error("StateBorders fetch failed: " + res.status);
-    statesGeoCache = await res.json();
-
-    map.createPane("statesPane");
-    map.getPane("statesPane").style.zIndex = 690;
-    map.getPane("popupPane").style.zIndex = 900;
-
-    if (statesLayer) map.removeLayer(statesLayer);
-
-    statesLayer = L.geoJSON(statesGeoCache, {
-      pane: "statesPane",
-      interactive: true,
-      style: (feature) => styleForStateFeature(feature),
-      onEachFeature: (feature, layer) => {
-        layer.on("click", (e) => {
-          if (!stateMode) return;
-
-          const p = (feature && feature.properties) ? feature.properties : {};
-          const ab = getStateAbbrevFromProps(p);
-          if (!ab) return;
-
-          lastClickedStateAbbrev = ab;
-          renderStateInfo(ab);
-
-          const stateName = getStateNameFromProps(p, ab);
-          const count = (rowsByState.get(ab) || []).filter(passesCurrentFilters).length;
-
-          L.popup()
-            .setLatLng(e.latlng)
-            .setContent(`<strong>${escapeHtml(stateName)} (${escapeHtml(ab)})</strong><br>${count} state record${count===1?"":"s"} found (current filters).`)
-            .openOn(map);
-        });
-      }
-    }).addTo(map);
-
-    setStateMode(stateMode, {skipRefresh:true});
-    refreshStatesStyle();
-  }
-
-  // =========================
-  // CANADA BORDERS LAYER (LIKE US STATES)
-  // =========================
-  async function addCanadaLayer() {
-    try {
-      const res = await fetch(CANADA_BORDERS_URL);
-      if (!res.ok) {
-        console.warn("Canada.json fetch failed:", res.status);
-        canadaLoaded = false;
-        return;
-      }
-      canadaGeoCache = await res.json();
-      canadaLoaded = true;
-      canadaFeatureCount = Array.isArray(canadaGeoCache.features) ? canadaGeoCache.features.length : 0;
-
-      map.createPane("canadaPane");
-      // Above counties, below state borders is fine; Canada doesn't overlap US states anyway.
-      map.getPane("canadaPane").style.zIndex = 680;
-
-      if (canadaLayer) map.removeLayer(canadaLayer);
-
-      canadaLayer = L.geoJSON(canadaGeoCache, {
-        pane: "canadaPane",
-        interactive: true,
-        style: styleForCanadaFeature,
-        onEachFeature: (feature, layer) => {
-          layer.on("click", (e) => {
-            if (stateMode) return;
-
-            const p = feature?.properties || {};
-
-            // highlight selection
-            if (selectedCanadaLeafletLayer) {
-              selectedCanadaLeafletLayer.setStyle(styleForCanadaFeature(null));
-            }
-            selectedCanadaLeafletLayer = layer;
-            layer.setStyle({ ...styleForCanadaFeature(feature), weight: 6, opacity: 1 });
-
-            renderCountyInfo(p);
-
-            const name = getCountyDisplayNameFromProps(p);
-            const tag = getCountyRegionTagFromProps(p);
-
-            L.popup()
-              .setLatLng(e.latlng)
-              .setContent(`<strong>${escapeHtml(tag ? `${name}, ${tag}` : name)}</strong><br>Canada province boundary (no data yet).`)
-              .openOn(map);
-          });
-        }
-      }).addTo(map);
-
-      // Canada should only be clickable in County mode
-      setCanadaInteractivity(!stateMode);
-    } catch (e) {
-      console.warn("Canada.json load error:", e);
-      canadaLoaded = false;
-    }
-  }
-
   function setStateMode(on, opts = {}) {
     stateMode = !!on;
 
@@ -1577,8 +1761,17 @@
       });
     }
 
-    // Canada only clickable in county mode
-    setCanadaInteractivity(!stateMode);
+    // Canada provinces: clickable only in county mode
+    if (canadaLayer) {
+      canadaLayer.eachLayer(layer => {
+        layer.options.interactive = !stateMode;
+        if (layer.getElement) {
+          const el = layer.getElement();
+          if (el) el.style.pointerEvents = stateMode ? "none" : "auto";
+        }
+      });
+      refreshCanadaStyle();
+    }
 
     if (stateMode) {
       if (vgLayer) {
@@ -1646,24 +1839,27 @@
   function buildSearchIndex() {
     const items = [];
 
-    for (const [geoid, rows] of rowsByGeoid.entries()) {
-      const props = countyPropsByGeoid.get(geoid);
-      const cName = props ? (props.NAME || props.name || props.NAMELSAD || "Unknown") : "Unknown";
-      const st = props ? (props.STUSPS || props.STATE || props.state || "") : "";
+    // Region rows (US + Canada)
+    for (const [key, rows] of rowsByGeoid.entries()) {
+      const props = regionPropsByKey.get(key);
+      const rName = props ? getRegionDisplayNameFromProps(props) : (key.startsWith("CA-") ? ("Canada " + key) : "Unknown");
+      const tag = props ? getRegionTagFromProps(props) : (key.startsWith("CA-") ? "CANADA" : "");
+
       for (const row of rows) {
         const agency = row["Law_Enforcement_Agency_Name"] || "";
         if (!hasValid(agency)) continue;
         items.push({
-          type: "county",
-          geoid,
-          county: cName,
-          st,
+          type: "region",
+          key,
+          region: rName,
+          tag,
           agency,
-          hay: `${cName} ${st} ${agency}`.toLowerCase()
+          hay: `${rName} ${tag} ${agency}`.toLowerCase()
         });
       }
     }
 
+    // State agency rows
     for (const [ab, rows] of rowsByState.entries()) {
       const stName = STATE_NAME_MAP[ab] || ab;
       for (const row of rows) {
@@ -1700,24 +1896,27 @@
       btn.type = "button";
       btn.className = "search-item";
 
-      if (item.type === "county") {
+      if (item.type === "region") {
         btn.innerHTML = `
           <div class="top">${escapeHtml(item.agency)}</div>
-          <div class="sub">County: ${escapeHtml(item.county)}${item.st ? ", " + escapeHtml(item.st) : ""}</div>
+          <div class="sub">Region: ${escapeHtml(item.region)}${item.tag ? ", " + escapeHtml(item.tag) : ""}</div>
         `;
         btn.addEventListener("click", () => {
           setStateMode(false);
-          const bounds = countyBoundsByGeoid.get(item.geoid);
-          const props = countyPropsByGeoid.get(item.geoid);
+
+          const bounds = regionBoundsByKey.get(item.key);
+          const props = regionPropsByKey.get(item.key);
+
           if (bounds) map.fitBounds(bounds, {padding:[20,20]});
           if (props) {
             lastClickedProps = props;
-            renderCountyInfo(props);
+            renderRegionInfo(props);
             if (bounds) {
               const center = bounds.getCenter();
-              L.popup().setLatLng(center).setContent(popupHtml(props)).openOn(map);
+              L.popup().setLatLng(center).setContent(popupHtmlForRegion(props)).openOn(map);
             }
           }
+
           renderSearchResults([]);
         });
       } else {
@@ -1796,20 +1995,33 @@
     return L.latLngBounds([minLat, minLng], [maxLat, maxLng]);
   }
 
-  function indexCountiesGeojson() {
-    countyPropsByGeoid.clear();
-    countyBoundsByGeoid.clear();
+  function indexUsCountiesGeojson() {
+    if (!usGeojsonCache || !usGeojsonCache.features) return;
 
-    if (!geojsonCache || !geojsonCache.features) return;
-
-    for (const f of geojsonCache.features) {
+    for (const f of usGeojsonCache.features) {
       const p = f.properties || {};
-      const geoid = normalizeGeoid(p.GEOID || p.geoid || p.GEOID10 || p.GEO_ID || "");
+      const geoid = normalizeUsGeoid(p.GEOID || p.geoid || p.GEOID10 || p.GEO_ID || "");
       if (!geoid) continue;
-      countyPropsByGeoid.set(geoid, p);
+
+      regionPropsByKey.set(geoid, p);
 
       const b = boundsFromGeometry(f.geometry);
-      if (b) countyBoundsByGeoid.set(geoid, b);
+      if (b) regionBoundsByKey.set(geoid, b);
+    }
+  }
+
+  function indexCanadaProvincesGeojson() {
+    if (!canadaProvincesCache || !canadaProvincesCache.features) return;
+
+    for (const f of canadaProvincesCache.features) {
+      const p = f.properties || {};
+      const key = regionKeyFromProps(p);
+      if (!key) continue;
+
+      regionPropsByKey.set(key, p);
+
+      const b = boundsFromGeometry(f.geometry);
+      if (b) regionBoundsByKey.set(key, b);
     }
   }
 
@@ -1838,6 +2050,7 @@
     document.getElementById("stateModeBtn").addEventListener("click", () => {
       setStateMode(!stateMode);
       renderFilterButtons();
+      refreshCanadaStyle();
     });
 
     document.querySelectorAll(".filter-btn[data-filter]").forEach(btn => {
@@ -1863,7 +2076,8 @@
 
         if (!stateMode) {
           await rebuildCountyLayer();
-          if (lastClickedProps) renderCountyInfo(lastClickedProps);
+          if (lastClickedProps) renderRegionInfo(lastClickedProps);
+          refreshCanadaStyle();
         } else {
           refreshStatesStyle();
           if (lastClickedStateAbbrev) renderStateInfo(lastClickedStateAbbrev);
@@ -1903,7 +2117,8 @@
 
         if (!stateMode) {
           await rebuildCountyLayer();
-          if (lastClickedProps) renderCountyInfo(lastClickedProps);
+          if (lastClickedProps) renderRegionInfo(lastClickedProps);
+          refreshCanadaStyle();
         } else {
           refreshStatesStyle();
           if (lastClickedStateAbbrev) renderStateInfo(lastClickedStateAbbrev);
@@ -1927,11 +2142,29 @@
       setStatus("Loading CSV data…");
       await Promise.all([loadCountyCsv(), loadStateAgencyCsv()]);
 
-      setStatus("Loading county shapes…");
+      setStatus("Loading US county shapes…");
       const usRes = await fetch(GEOJSON_URL);
       if (!usRes.ok) throw new Error("GeoJSON fetch failed (US): " + usRes.status);
-      geojsonCache = await usRes.json();
-      indexCountiesGeojson();
+      usGeojsonCache = await usRes.json();
+
+      // Load Canada and dissolve divisions -> provinces for thick borders like US states
+      setStatus("Loading Canada shapes…");
+      try {
+        const caRes = await fetch(CANADA_GEOJSON_URL);
+        if (caRes.ok) {
+          const caGeo = await caRes.json();
+          canadaLoaded = true;
+          canadaDivCount = Array.isArray(caGeo.features) ? caGeo.features.length : 0;
+
+          setStatus("Building Canada provinces (dissolve)…");
+          canadaProvincesCache = dissolveCanadaToProvinces(caGeo);
+          canadaProvCount = Array.isArray(canadaProvincesCache?.features) ? canadaProvincesCache.features.length : 0;
+        } else {
+          console.warn("Canada.json fetch failed:", caRes.status);
+        }
+      } catch (e) {
+        console.warn("Canada.json fetch error:", e);
+      }
 
       map = L.map("map").setView(DEFAULT_CENTER, DEFAULT_ZOOM);
 
@@ -1943,12 +2176,17 @@
       map.createPane("countiesPane");
       map.getPane("countiesPane").style.zIndex = 650;
 
+      // Index regions for search/zoom
+      indexUsCountiesGeojson();
+      if (canadaProvincesCache) indexCanadaProvincesGeojson();
+
+      // Add layers
       setStatus("Loading state borders…");
       await addStatesLayer();
       indexStatesGeojson();
 
-      setStatus("Loading Canada borders…");
-      await addCanadaLayer();
+      // Canada provinces (thick borders)
+      if (canadaProvincesCache) await addCanadaLayer();
 
       setTimeout(() => map.invalidateSize(), 0);
       window.addEventListener("resize", () => map.invalidateSize());
@@ -1964,8 +2202,11 @@
       setSidebarOpen(false);
       maybeShowMobileHint();
 
-      const caMsg = canadaLoaded ? ` Canada loaded (${canadaFeatureCount} features).` : " Canada not loaded (check Canada.json name/path).";
-      setStatus("Data loaded. Click a county, or toggle State mode to click states." + caMsg);
+      const caMsg = canadaLoaded
+        ? ` Canada ready (${canadaProvCount} provinces; source had ${canadaDivCount} divisions).`
+        : " Canada not loaded (check Canada.json path/name).";
+
+      setStatus("Data loaded. Click a county or a Canada province. Toggle State mode to click US states." + caMsg);
     } catch (err) {
       console.error(err);
       setStatus("Error loading data. Open console for details.");
