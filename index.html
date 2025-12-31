@@ -20,7 +20,6 @@
     #app { display: flex; height: 100vh; width: 100vw; }
     #map { flex: 2; min-width: 0; }
 
-    /* Sidebar: cleaner */
     #sidebar {
       flex: 1;
       max-width: 460px;
@@ -84,7 +83,6 @@
 
     .filter-btn.active { background: #222; color: #fff; border-color: #222; }
     .filter-btn.active .tick { visibility: visible; }
-
     .filter-btn.disabled { opacity: 0.45; cursor: not-allowed; }
 
     .ka-split{
@@ -210,7 +208,6 @@
     .flagline { margin-top: 6px; }
     .flagline div { margin-top: 3px; }
 
-    /* Notes/Special Tactics link formatting */
     .notes-block { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
     .note-line { line-height: 1.25; overflow-wrap: anywhere; word-break: break-word; }
     .note-link {
@@ -229,16 +226,14 @@
     }
     .note-text { white-space: normal; }
 
-    /* =========================
-       MOBILE: COLLAPSIBLE SIDEBAR (DRAWER) + TOGGLE BUTTON
-       ========================= */
+    /* MOBILE */
     #sidebarToggle {
       position: fixed;
       top: 12px;
       right: 12px;
       left: auto;
       z-index: 1200;
-      display: none; /* shown on mobile only */
+      display: none;
       height: 42px;
       width: 42px;
       border-radius: 12px;
@@ -262,7 +257,6 @@
     }
     #sidebarBackdrop.open { display: block; }
 
-    /* Mobile hint bubble */
     #mobileHint{
       position: fixed;
       top: 62px;
@@ -292,7 +286,6 @@
       line-height: 1.25;
     }
 
-    /* arrow pointing at menu */
     #mobileHint::before{
       content: "";
       position: absolute;
@@ -319,10 +312,8 @@
     @media (max-width: 900px) {
       #app { display: block; }
       #map { height: 100vh; width: 100vw; }
-
       #sidebarToggle { display: inline-flex; }
 
-      /* smaller filter buttons on mobile */
       .filter-btn{
         min-width: 46px;
         height: 36px;
@@ -348,7 +339,6 @@
       }
       .filter-row { gap: 5px; }
 
-      /* Drawer-style sidebar overlay */
       #sidebar {
         position: fixed;
         top: 0;
@@ -370,7 +360,6 @@
 </head>
 
 <body>
-<!-- MOBILE: TOGGLE + BACKDROP + HINT -->
 <button id="sidebarToggle" type="button" aria-label="Open sidebar" aria-expanded="false">☰</button>
 <div id="sidebarBackdrop" aria-hidden="true"></div>
 <div id="mobileHint" aria-hidden="true">
@@ -489,6 +478,7 @@
 
   const GEOJSON_URL = "./allCounties.json";
   const STATE_BORDERS_URL = "./StateBorders.json";
+  const CANADA_BORDERS_URL = "./Canada.json"; // only file you said exists
 
   const DEFAULT_CENTER = [39.5, -98.35];
   const DEFAULT_ZOOM = 4;
@@ -503,6 +493,26 @@
     NY:"New York", NC:"North Carolina", ND:"North Dakota", OH:"Ohio", OK:"Oklahoma", OR:"Oregon", PA:"Pennsylvania",
     RI:"Rhode Island", SC:"South Carolina", SD:"South Dakota", TN:"Tennessee", TX:"Texas", UT:"Utah", VT:"Vermont",
     VA:"Virginia", WA:"Washington", WV:"West Virginia", WI:"Wisconsin", WY:"Wyoming", DC:"District of Columbia"
+  };
+
+  // Canada province/territory codes (StatsCan PRUID -> abbrev + name)
+  const CA_PROV_ABBR = {
+    "10":"NL","11":"PE","12":"NS","13":"NB","24":"QC","35":"ON","46":"MB","47":"SK","48":"AB","59":"BC","60":"YT","61":"NT","62":"NU"
+  };
+  const CA_PROV_NAME = {
+    "10":"Newfoundland and Labrador",
+    "11":"Prince Edward Island",
+    "12":"Nova Scotia",
+    "13":"New Brunswick",
+    "24":"Quebec",
+    "35":"Ontario",
+    "46":"Manitoba",
+    "47":"Saskatchewan",
+    "48":"Alberta",
+    "59":"British Columbia",
+    "60":"Yukon",
+    "61":"Northwest Territories",
+    "62":"Nunavut"
   };
 
   // =========================
@@ -526,6 +536,13 @@
   let map, vgLayer, geojsonCache;
   let statesLayer = null;
   let statesGeoCache = null;
+
+  // Canada layer (thick borders like US states)
+  let canadaLayer = null;
+  let canadaGeoCache = null;
+  let selectedCanadaLeafletLayer = null;
+  let canadaLoaded = false;
+  let canadaFeatureCount = 0;
 
   let stateMode = false;
 
@@ -579,11 +596,9 @@
   let searchIndex = [];
 
   // =========================
-  // HELPERS (SAFE HTML + BR FIX)
+  // HELPERS
   // =========================
-  function setStatus(msg) {
-    document.getElementById("status").textContent = msg;
-  }
+  function setStatus(msg) { document.getElementById("status").textContent = msg; }
 
   function hasValid(v) {
     if (v === undefined || v === null) return false;
@@ -634,36 +649,27 @@
       .join("<br>");
   }
 
-  // =========================
-  // Notes/Special tactics formatting with clickable links
-  // =========================
   function normalizeUrl_(raw) {
     let u = String(raw || "").trim();
     if (!u) return "";
-
     if (/^www\./i.test(u)) u = "https://" + u;
     u = u.replace(/[)\],.]+$/g, "");
-
     try {
       const parsed = new URL(u);
       if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return "";
       return parsed.href;
-    } catch {
-      return "";
-    }
+    } catch { return ""; }
   }
 
   function hostFromUrl_(u) {
-    try {
-      return new URL(u).hostname.replace(/^www\./i, "");
-    } catch { return ""; }
+    try { return new URL(u).hostname.replace(/^www\./i, ""); }
+    catch { return ""; }
   }
 
   function parseLinkLine_(line) {
     const s = String(line || "").trim();
     if (!s) return null;
 
-    // Label | URL
     let m = s.match(/^(.+?)\s*\|\s*(\S+)\s*$/);
     if (m) {
       const url = normalizeUrl_(m[2]);
@@ -671,7 +677,6 @@
       return { label: m[1].trim(), url };
     }
 
-    // Markdown [Label](URL)
     m = s.match(/^\[([^\]]+?)\]\(([^)]+)\)\s*$/);
     if (m) {
       const url = normalizeUrl_(m[2]);
@@ -679,7 +684,6 @@
       return { label: m[1].trim(), url };
     }
 
-    // URL only
     m = s.match(/^(\S+)$/);
     if (m) {
       const url = normalizeUrl_(m[1]);
@@ -687,7 +691,6 @@
       return { label: hostFromUrl_(url) || "Link", url };
     }
 
-    // Label + URL at end
     m = s.match(/^(.*?)(https?:\/\/\S+|www\.\S+)\s*$/i);
     if (m) {
       const url = normalizeUrl_(m[2]);
@@ -701,13 +704,8 @@
 
   function formatNotesWithLinks(value) {
     if (!hasValid(value)) return "";
-
     const raw = normalizeBreaksToNewlines(value);
-    const parts = raw
-      .split(/;|\n/)
-      .map(s => s.trim())
-      .filter(Boolean);
-
+    const parts = raw.split(/;|\n/).map(s => s.trim()).filter(Boolean);
     if (parts.length === 0) return "";
 
     const linesHtml = parts.map(p => {
@@ -744,10 +742,7 @@
   function containsDE(val) {
     if (!hasValid(val)) return false;
     const s = String(val);
-    return (
-      /\bDE[A-Z0-9_-]*\b/i.test(s) ||
-      /\bdragon\s*eye\b/i.test(s)
-    );
+    return (/\bDE[A-Z0-9_-]*\b/i.test(s) || /\bdragon\s*eye\b/i.test(s));
   }
 
   function matchAnyRegex(text, regexList) {
@@ -767,7 +762,6 @@
   function normalizeGeoid(v) {
     let t = String(v ?? "").trim();
     if (!t) return "";
-
     if (/^\d{5}$/.test(t)) return t;
 
     if (/^\d+(\.\d+)?$/.test(t)) {
@@ -785,8 +779,46 @@
       const maybe = digits.slice(0, 5);
       if (/^\d{5}$/.test(maybe)) return maybe;
     }
-
     return "";
+  }
+
+  // Canada detection + name from PRUID (works for dissolved provinces)
+  function isCanadaProps(p) {
+    return !!(p && (p.PRUID || p.pruid));
+  }
+
+  function canadaPrFromProps(p) {
+    const pr = String(p?.PRUID ?? p?.pruid ?? "").trim();
+    return pr ? pr.padStart(2, "0") : "";
+  }
+
+  function canadaProvAbbrevFromProps(p) {
+    const pr = canadaPrFromProps(p);
+    return pr ? (CA_PROV_ABBR[pr] || "") : "";
+  }
+
+  function canadaProvNameFromProps(p) {
+    const pr = canadaPrFromProps(p);
+    if (hasValid(p?.PRNAME)) return String(p.PRNAME).trim();
+    if (hasValid(p?.prname)) return String(p.prname).trim();
+    if (pr && CA_PROV_NAME[pr]) return CA_PROV_NAME[pr];
+    // fallback for non-dissolved files
+    if (hasValid(p?.CDNAME)) return String(p.CDNAME).trim();
+    if (hasValid(p?.cdname)) return String(p.cdname).trim();
+    return "Unknown";
+  }
+
+  function getCountyDisplayNameFromProps(p) {
+    if (isCanadaProps(p)) return canadaProvNameFromProps(p);
+    return String(p?.NAME || p?.name || p?.NAMELSAD || "Unknown").trim();
+  }
+
+  function getCountyRegionTagFromProps(p) {
+    if (isCanadaProps(p)) {
+      const ab = canadaProvAbbrevFromProps(p);
+      return ab || "CA";
+    }
+    return String(p?.STUSPS || p?.STATE_NAME || p?.state || p?.STATE || "").trim();
   }
 
   function normalizeStateAbbrev(v) {
@@ -910,7 +942,7 @@
   }
 
   // =========================
-  // MOBILE SIDEBAR TOGGLE LOGIC + HINT (shows every reload on mobile)
+  // MOBILE SIDEBAR
   // =========================
   const MOBILE_BREAKPOINT = 900;
   const sidebarEl = document.getElementById("sidebar");
@@ -918,9 +950,7 @@
   const sidebarBackdropEl = document.getElementById("sidebarBackdrop");
   const mobileHintEl = document.getElementById("mobileHint");
 
-  function isMobileLayout() {
-    return window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT}px)`).matches;
-  }
+  function isMobileLayout() { return window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT}px)`).matches; }
 
   function showMobileHint() {
     if (!mobileHintEl) return;
@@ -936,7 +966,7 @@
 
   function maybeShowMobileHint() {
     if (!isMobileLayout()) return;
-    showMobileHint(); // always on reload (mobile only)
+    showMobileHint();
   }
 
   function setSidebarOpen(open) {
@@ -960,7 +990,7 @@
   }
 
   sidebarToggleBtn.addEventListener("click", () => {
-    hideMobileHint(); // goes away after clicking the menu button
+    hideMobileHint();
     const open = sidebarEl.classList.contains("open");
     setSidebarOpen(!open);
   });
@@ -973,7 +1003,7 @@
   });
 
   // =========================
-  // LOAD COUNTY CSV
+  // LOAD CSVs
   // =========================
   async function loadCountyCsv() {
     const res = await fetch(COUNTY_CSV_URL);
@@ -1020,9 +1050,6 @@
     }
   }
 
-  // =========================
-  // LOAD STATE AGENCY CSV
-  // =========================
   async function loadStateAgencyCsv() {
     const res = await fetch(STATE_AGENCY_CSV_URL);
     if (!res.ok) throw new Error("State Agency CSV fetch failed: " + res.status);
@@ -1087,19 +1114,26 @@
   }
 
   // =========================
-  // COUNTY RENDER
+  // COUNTY RENDER (US + CANADA)
   // =========================
   function renderCountyInfo(props) {
     const countyNameEl = document.getElementById("county-name");
     const recordsEl = document.getElementById("records");
 
-    const name = props.NAME || props.name || props.NAMELSAD || "Unknown";
-    const st = props.STUSPS || props.STATE_NAME || props.state || "";
-    const geoid = normalizeGeoid(props.GEOID || props.geoid || props.GEOID10 || props.GEO_ID || "");
+    const name = getCountyDisplayNameFromProps(props);
+    const tag = getCountyRegionTagFromProps(props);
 
-    countyNameEl.textContent = st ? `${name}, ${st}` : name;
+    countyNameEl.textContent = tag ? `${name}, ${tag}` : name;
     recordsEl.innerHTML = "";
 
+    // Canada: only show province name (no data wiring yet)
+    if (isCanadaProps(props)) {
+      recordsEl.innerHTML = "<p>Canada province boundary only (no data yet).</p>";
+      setSidebarOpen(false);
+      return;
+    }
+
+    const geoid = normalizeGeoid(props.GEOID || props.geoid || props.GEOID10 || props.GEO_ID || "");
     const all = rowsByGeoid.get(geoid) || [];
     const filtered = all.filter(passesCurrentFilters);
 
@@ -1144,17 +1178,21 @@
   }
 
   function popupHtml(props) {
-    const name = props.NAME || props.name || props.NAMELSAD || "Unknown";
-    const st = props.STUSPS || props.STATE_NAME || props.state || "";
-    const geoid = normalizeGeoid(props.GEOID || props.geoid || props.GEOID10 || props.GEO_ID || "");
+    const name = getCountyDisplayNameFromProps(props);
+    const tag = getCountyRegionTagFromProps(props);
 
+    if (isCanadaProps(props)) {
+      return `<strong>${escapeHtml(tag ? `${name}, ${tag}` : name)}</strong><br>Canada province boundary (no data yet).`;
+    }
+
+    const geoid = normalizeGeoid(props.GEOID || props.geoid || props.GEOID10 || props.GEO_ID || "");
     const all = rowsByGeoid.get(geoid) || [];
     const row = all.find(passesCurrentFilters);
 
-    if (!row) return `<strong>${escapeHtml(st ? `${name}, ${st}` : name)}</strong><br>No data for the selected filters.`;
+    if (!row) return `<strong>${escapeHtml(tag ? `${name}, ${tag}` : name)}</strong><br>No data for the selected filters.`;
 
     const agency = escapeHtml(row["Law_Enforcement_Agency_Name"] || "Unknown agency");
-    return `<strong>${escapeHtml(st ? `${name}, ${st}` : name)}</strong><br>Main agency: ${agency}`;
+    return `<strong>${escapeHtml(tag ? `${name}, ${tag}` : name)}</strong><br>Main agency: ${agency}`;
   }
 
   // =========================
@@ -1222,7 +1260,7 @@
   }
 
   // =========================
-  // COUNTY STYLE
+  // COUNTY STYLE (US)
   // =========================
   function styleForCountyProps(props) {
     const geoid = normalizeGeoid(props.GEOID || props.geoid || props.GEOID10 || props.GEO_ID || "");
@@ -1278,7 +1316,7 @@
   }
 
   // =========================
-  // STATE STYLE (FILL ONLY IN STATE MODE + FILTERING)
+  // STATE STYLE
   // =========================
   function styleForStateFeature(feature) {
     const p = (feature && feature.properties) ? feature.properties : {};
@@ -1339,7 +1377,32 @@
   }
 
   // =========================
-  // BUILD VECTORGRID (COUNTIES)
+  // CANADA STYLE (THICK LIKE US STATES)
+  // =========================
+  function styleForCanadaFeature(feature) {
+    return {
+      color: "#000",
+      weight: 4,          // thick border
+      opacity: 0.9,
+      fill: true,
+      fillOpacity: 0.0,   // no fill, just outline like state borders
+      fillColor: "#000"
+    };
+  }
+
+  function setCanadaInteractivity(on) {
+    if (!canadaLayer) return;
+    canadaLayer.eachLayer(layer => {
+      layer.options.interactive = !!on;
+      if (layer.getElement) {
+        const el = layer.getElement();
+        if (el) el.style.pointerEvents = on ? "auto" : "none";
+      }
+    });
+  }
+
+  // =========================
+  // BUILD VECTORGRID (US COUNTIES ONLY)
   // =========================
   async function rebuildCountyLayer() {
     if (!geojsonCache) return;
@@ -1399,7 +1462,7 @@
   }
 
   // =========================
-  // STATE BORDERS + CLICKABLE STATES
+  // STATE BORDERS
   // =========================
   async function addStatesLayer() {
     const res = await fetch(STATE_BORDERS_URL);
@@ -1442,6 +1505,65 @@
     refreshStatesStyle();
   }
 
+  // =========================
+  // CANADA BORDERS LAYER (LIKE US STATES)
+  // =========================
+  async function addCanadaLayer() {
+    try {
+      const res = await fetch(CANADA_BORDERS_URL);
+      if (!res.ok) {
+        console.warn("Canada.json fetch failed:", res.status);
+        canadaLoaded = false;
+        return;
+      }
+      canadaGeoCache = await res.json();
+      canadaLoaded = true;
+      canadaFeatureCount = Array.isArray(canadaGeoCache.features) ? canadaGeoCache.features.length : 0;
+
+      map.createPane("canadaPane");
+      // Above counties, below state borders is fine; Canada doesn't overlap US states anyway.
+      map.getPane("canadaPane").style.zIndex = 680;
+
+      if (canadaLayer) map.removeLayer(canadaLayer);
+
+      canadaLayer = L.geoJSON(canadaGeoCache, {
+        pane: "canadaPane",
+        interactive: true,
+        style: styleForCanadaFeature,
+        onEachFeature: (feature, layer) => {
+          layer.on("click", (e) => {
+            if (stateMode) return;
+
+            const p = feature?.properties || {};
+
+            // highlight selection
+            if (selectedCanadaLeafletLayer) {
+              selectedCanadaLeafletLayer.setStyle(styleForCanadaFeature(null));
+            }
+            selectedCanadaLeafletLayer = layer;
+            layer.setStyle({ ...styleForCanadaFeature(feature), weight: 6, opacity: 1 });
+
+            renderCountyInfo(p);
+
+            const name = getCountyDisplayNameFromProps(p);
+            const tag = getCountyRegionTagFromProps(p);
+
+            L.popup()
+              .setLatLng(e.latlng)
+              .setContent(`<strong>${escapeHtml(tag ? `${name}, ${tag}` : name)}</strong><br>Canada province boundary (no data yet).`)
+              .openOn(map);
+          });
+        }
+      }).addTo(map);
+
+      // Canada should only be clickable in County mode
+      setCanadaInteractivity(!stateMode);
+    } catch (e) {
+      console.warn("Canada.json load error:", e);
+      canadaLoaded = false;
+    }
+  }
+
   function setStateMode(on, opts = {}) {
     stateMode = !!on;
 
@@ -1454,6 +1576,9 @@
         }
       });
     }
+
+    // Canada only clickable in county mode
+    setCanadaInteractivity(!stateMode);
 
     if (stateMode) {
       if (vgLayer) {
@@ -1803,9 +1928,9 @@
       await Promise.all([loadCountyCsv(), loadStateAgencyCsv()]);
 
       setStatus("Loading county shapes…");
-      const geoRes = await fetch(GEOJSON_URL);
-      if (!geoRes.ok) throw new Error("GeoJSON fetch failed: " + geoRes.status);
-      geojsonCache = await geoRes.json();
+      const usRes = await fetch(GEOJSON_URL);
+      if (!usRes.ok) throw new Error("GeoJSON fetch failed (US): " + usRes.status);
+      geojsonCache = await usRes.json();
       indexCountiesGeojson();
 
       map = L.map("map").setView(DEFAULT_CENTER, DEFAULT_ZOOM);
@@ -1822,6 +1947,9 @@
       await addStatesLayer();
       indexStatesGeojson();
 
+      setStatus("Loading Canada borders…");
+      await addCanadaLayer();
+
       setTimeout(() => map.invalidateSize(), 0);
       window.addEventListener("resize", () => map.invalidateSize());
 
@@ -1833,11 +1961,11 @@
       buildSearchIndex();
       initSearch();
 
-      // Mobile starts collapsed + shows hint every reload (mobile only)
       setSidebarOpen(false);
       maybeShowMobileHint();
 
-      setStatus("Data loaded. Click a county, or toggle State mode to click states.");
+      const caMsg = canadaLoaded ? ` Canada loaded (${canadaFeatureCount} features).` : " Canada not loaded (check Canada.json name/path).";
+      setStatus("Data loaded. Click a county, or toggle State mode to click states." + caMsg);
     } catch (err) {
       console.error(err);
       setStatus("Error loading data. Open console for details.");
