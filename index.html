@@ -608,8 +608,6 @@
 
   // Canada load info
   let canadaLoaded = false;
-  let canadaDivCount = 0;
-  let canadaProvCount = 0;
 
   // =========================
   // HELPERS (SAFE HTML + BR FIX)
@@ -937,7 +935,13 @@
   }
 
   function rowHasAnyContent(row) {
-    const core = hasValid(row["K_band"]) || hasValid(row["Ka_band"]) || hasValid(row["Lidar_Guns"]) || hasValid(row["X_band"]);
+    const core =
+      hasValid(row["K_band"]) ||
+      hasValid(row["Ka_band"]) ||
+      hasValid(row["Lidar_Guns"]) ||
+      hasValid(row["X_band"]) ||
+      hasValid(getField(row, "SpeedCameras", "Speed Cameras", "Speed_Cameras", "Speed Camera", "SpeedCamera", "Cameras"));
+
     if (core) return true;
 
     if (hasValid(row["Special_Tactics"])) return true;
@@ -1247,6 +1251,10 @@
       const kVal  = hasValid(row["K_band"])  ? formatMulti(row["K_band"])  : "";
       const lidar = hasValid(row["Lidar_Guns"]) ? formatMulti(row["Lidar_Guns"]) : "";
 
+      // Speed Cameras (from CSV)
+      const speedCamerasRaw = getField(row, "SpeedCameras", "Speed Cameras", "Speed_Cameras", "Speed Camera", "SpeedCamera", "Cameras");
+      const speedCameras = hasValid(speedCamerasRaw) ? formatMulti(speedCamerasRaw) : "";
+
       const tactics = hasValid(row["Special_Tactics"]) ? formatNotesWithLinks(row["Special_Tactics"]) : "";
       const flags = flagsHtmlFromRow(row);
 
@@ -1264,6 +1272,7 @@
         <div class="record-header">${idx + 1}. ${agency}</div>
         ${bandsHtml}
         ${lidar ? `<div style="margin-top:6px;"><strong>Lidar:</strong><br>${lidar}</div>` : ""}
+        ${speedCameras ? `<div style="margin-top:6px;"><strong>Speed Cameras:</strong><br>${speedCameras}</div>` : ""}
         ${flags ? `${flags}` : ""}
         ${tactics ? `<div style="margin-top:6px;"><strong>Special tactics:</strong><br>${tactics}</div>` : ""}
       `;
@@ -1716,6 +1725,10 @@
       const kVal  = hasValid(row["K_band"])  ? formatMulti(row["K_band"])  : "";
       const lidar = hasValid(row["Lidar_Guns"]) ? formatMulti(row["Lidar_Guns"]) : "";
 
+      // Speed Cameras (if present in state CSV too)
+      const speedCamerasRaw = getField(row, "SpeedCameras", "Speed Cameras", "Speed_Cameras", "Speed Camera", "SpeedCamera", "Cameras");
+      const speedCameras = hasValid(speedCamerasRaw) ? formatMulti(speedCamerasRaw) : "";
+
       const tactics = hasValid(row["Special_Tactics"]) ? formatNotesWithLinks(row["Special_Tactics"]) : "";
       const notes = hasValid(row["Notes"]) ? formatNotesWithLinks(row["Notes"]) : "";
 
@@ -1735,6 +1748,7 @@
         <div class="record-header">${idx + 1}. ${agency}</div>
         ${bandsHtml}
         ${lidar ? `<div style="margin-top:6px;"><strong>Lidar:</strong><br>${lidar}</div>` : ""}
+        ${speedCameras ? `<div style="margin-top:6px;"><strong>Speed Cameras:</strong><br>${speedCameras}</div>` : ""}
         ${flags ? `${flags}` : ""}
         ${tactics ? `<div style="margin-top:6px;"><strong>Special tactics:</strong><br>${tactics}</div>` : ""}
         ${notes ? `<div style="margin-top:6px;"><strong>Notes:</strong><br>${notes}</div>` : ""}
@@ -2154,11 +2168,9 @@
         if (caRes.ok) {
           const caGeo = await caRes.json();
           canadaLoaded = true;
-          canadaDivCount = Array.isArray(caGeo.features) ? caGeo.features.length : 0;
 
-          setStatus("Building Canada provinces (dissolve)…");
+          setStatus("Building Canada provinces…");
           canadaProvincesCache = dissolveCanadaToProvinces(caGeo);
-          canadaProvCount = Array.isArray(canadaProvincesCache?.features) ? canadaProvincesCache.features.length : 0;
         } else {
           console.warn("Canada.json fetch failed:", caRes.status);
         }
@@ -2202,11 +2214,8 @@
       setSidebarOpen(false);
       maybeShowMobileHint();
 
-      const caMsg = canadaLoaded
-        ? ` Canada ready (${canadaProvCount} provinces; source had ${canadaDivCount} divisions).`
-        : " Canada not loaded (check Canada.json path/name).";
-
-      setStatus("Data loaded. Click a county or a Canada province. Toggle State mode to click US states." + caMsg);
+      const extra = canadaLoaded ? " Canada provinces are available in County mode." : "";
+      setStatus("Data loaded. Click a county or Canadian province. Toggle State mode to click US states." + extra);
     } catch (err) {
       console.error(err);
       setStatus("Error loading data. Open console for details.");
