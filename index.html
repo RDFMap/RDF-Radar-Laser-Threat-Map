@@ -229,6 +229,38 @@
     }
     .note-text { white-space: normal; }
 
+    /* === Header (title/status left, links right) === */
+    .header-row{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap: 12px;
+    }
+    .header-left{ min-width: 0; }
+          .header-links{
+      display:flex;
+      flex-direction:column;
+      align-items:flex-end;
+      gap: 6px;
+      text-align:right;
+
+      /* IMPORTANT: give it room */
+      min-width: 140px;
+      max-width: 180px;
+    }
+
+    .header-links a{
+      font-size: 11px;
+      font-weight: 600;
+      line-height: 1.15;
+      text-decoration: underline;
+
+      /* IMPORTANT: don't split words */
+      word-break: normal;
+      overflow-wrap: normal;
+      white-space: nowrap;
+    }
+
     /* =========================
        MOBILE: COLLAPSIBLE SIDEBAR (DRAWER) + TOGGLE BUTTON
        ========================= */
@@ -365,6 +397,10 @@
       #sidebar.open { transform: translateX(0); }
 
       body.no-scroll { overflow: hidden; }
+
+      /* Header links stack nicely on mobile */
+      .header-row{ flex-direction:column; align-items:flex-start; }
+      .header-links{ align-items:flex-start; text-align:left; }
     }
   </style>
 </head>
@@ -383,8 +419,21 @@
 
   <div id="sidebar">
     <div class="panel">
-      <h1>RDF Radar & Laser Threat Map</h1>
-      <div id="status">Loading…</div>
+      <div class="header-row">
+        <div class="header-left">
+          <h1>RDF Radar & Laser Threat Map</h1>
+          <div id="status">Loading…</div>
+        </div>
+
+        <div class="header-links">
+          <a href="https://www.rdforum.org/threads/150468/" target="_blank" rel="noopener noreferrer">
+            RDForum Thread & Updates
+          </a>
+          <a href="https://forms.fillout.com/t/dsffrfAc4jus" target="_blank" rel="noopener noreferrer">
+            Have Data? Submit here
+          </a>
+        </div>
+      </div>
     </div>
 
     <div class="panel">
