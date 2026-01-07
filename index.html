@@ -135,6 +135,22 @@
     .cam-btn.active .tick{ visibility:visible; }
     .cam-btn.disabled{ opacity:0.45; cursor:not-allowed; }
 
+    /* State cam rollup toggle row under cam filters */
+    .cam-rollup-row{
+      margin-top: 10px;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      gap:6px;
+      text-align:center;
+    }
+    .cam-rollup-row .hint{
+      font-size:12px;
+      color:#666;
+      line-height: 1.2;
+    }
+
     .ka-split{
       position: relative;
       display:inline-flex;
@@ -292,40 +308,44 @@
     }
     .note-text { white-space: normal; }
 
-    /* Speed camera lines */
-    .cam-lines{ margin-top: 6px; }
-    .cam-line{
+    /* Combined speed camera list */
+    .cam-list{
+      margin: 6px 0 0 18px;
+      padding: 0;
+    }
+    .cam-list li{
       margin-top: 4px;
       line-height: 1.25;
       overflow-wrap:anywhere;
       word-break: break-word;
     }
-    .cam-line.cam-off{
-      opacity: 0.50;
-    }
+    .cam-off{ opacity: 0.50; }
 
-    /* === Header: keep simple. Links moved DOWN under status === */
+    /* === Header (title/status left, links right) === */
     .header-row{
       display:flex;
       align-items:flex-start;
-      justify-content:flex-start;
+      justify-content:space-between;
       gap: 12px;
     }
     .header-left{ min-width: 0; }
-
     .header-links{
-      margin-top: 10px;           /* <-- links moved down */
       display:flex;
       flex-direction:column;
-      align-items:flex-start;      /* left aligned */
+      align-items:flex-end;
       gap: 6px;
-      text-align:left;
+      text-align:right;
+      min-width: 140px;
+      max-width: 180px;
     }
+
     .header-links a{
       font-size: 11px;
       font-weight: 600;
       line-height: 1.15;
       text-decoration: underline;
+      word-break: normal;
+      overflow-wrap: normal;
       white-space: nowrap;
     }
 
@@ -479,8 +499,9 @@
 
       body.no-scroll { overflow: hidden; }
 
-      /* Header links stack nicely on mobile (already stacked) */
+      /* Header links stack nicely on mobile */
       .header-row{ flex-direction:column; align-items:flex-start; }
+      .header-links{ align-items:flex-start; text-align:left; }
     }
   </style>
 </head>
@@ -503,16 +524,15 @@
         <div class="header-left">
           <h1>RDF Radar & Laser Threat Map</h1>
           <div id="status">Loading…</div>
+        </div>
 
-          <!-- moved down: links are now under status -->
-          <div class="header-links">
-            <a href="https://www.rdforum.org/threads/150468/" target="_blank" rel="noopener noreferrer">
-              RDForum Thread & Updates
-            </a>
-            <a href="https://forms.fillout.com/t/dsffrfAc4jus" target="_blank" rel="noopener noreferrer">
-              Have Data? Submit here
-            </a>
-          </div>
+        <div class="header-links">
+          <a href="https://www.rdforum.org/threads/150468/" target="_blank" rel="noopener noreferrer">
+            RDForum Thread & Updates
+          </a>
+          <a href="https://forms.fillout.com/t/dsffrfAc4jus" target="_blank" rel="noopener noreferrer">
+            Have Data? Submit here
+          </a>
         </div>
       </div>
     </div>
@@ -571,7 +591,7 @@
         </button>
 
         <div class="hint" id="modeHint" style="display:none;">
-          State Mode is on. Click a state to view state agencies.
+          State Mode is on. Click a state to view state data.
         </div>
       </div>
 
@@ -604,6 +624,16 @@
             <div class="label">P2P</div><div class="tick">✅</div>
           </button>
         </div>
+
+        <!-- State-mode-only rollup toggle -->
+        <div class="cam-rollup-row">
+          <button class="filter-btn" id="stateCamRollupBtn" type="button">
+            <div class="label">State Cam List</div><div class="tick">✅</div>
+          </button>
+          <div class="hint" id="stateCamRollupHint">
+            State mode only. Turn on to show a combined speed camera list for the whole selected state.
+          </div>
+        </div>
       </div>
     </div>
 
@@ -623,7 +653,7 @@
 
       <div style="height:10px;"></div>
 
-      <h2>State Agencies / Records</h2>
+      <h2 id="stateRecordsTitle">State Agencies / Records</h2>
       <div id="state-records"></div>
     </div>
   </div>
@@ -637,8 +667,6 @@
 
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 <script src="https://unpkg.com/leaflet.vectorgrid@1.3.0/dist/Leaflet.VectorGrid.bundled.js"></script>
-
-<!-- used to dissolve Canada census divisions into provinces (thick borders like US states) -->
 <script src="https://cdn.jsdelivr.net/npm/polygon-clipping@0.15.7/dist/polygon-clipping.umd.js"></script>
 
 <script>
@@ -664,8 +692,9 @@
   // Speed camera filters
   const CAM_FILTERS = ["cam_fmcw", "cam_mrct", "cam_k", "cam_lidar", "cam_gatso", "cam_p2p"];
 
-  // Map colors look clean when all BAND filters are on and cams are off:
-  // we keep the "green for any band data" behavior in that specific case.
+    function isBandFilter(f) { return BAND_FILTERS.includes(f); }
+    function isCamFilter(f)  { return CAM_FILTERS.includes(f); }
+
   function bandAllOn() { return BAND_FILTERS.every(f => selectedFilters.has(f)); }
   function camAllOn()  { return CAM_FILTERS.every(f => selectedFilters.has(f)); }
   function camAnyOn()  { return CAM_FILTERS.some(f => selectedFilters.has(f)); }
@@ -729,6 +758,22 @@
     return "cam_fmcw";
   }
 
+  function hasValid(v) {
+    if (v === undefined || v === null) return false;
+    const t = String(v).trim();
+    if (!t) return false;
+    return t.toLowerCase() !== "n/a";
+  }
+
+  function normalizeBreaksToNewlines(s) {
+    if (!hasValid(s)) return "";
+    let t = String(s);
+    t = t.replace(/&lt;\s*br\s*\/?\s*&gt;/gi, "\n");
+    t = t.replace(/<\s*br\s*\/?\s*>/gi, "\n");
+    t = t.replace(/\\n/g, "\n");
+    return t;
+  }
+
   function normalizeCamParts(raw) {
     if (!hasValid(raw)) return [];
     const t = normalizeBreaksToNewlines(raw);
@@ -736,6 +781,20 @@
       .split(/;|\n/)
       .map(s => s.trim())
       .filter(Boolean);
+  }
+
+  function getField(row, ...keys) {
+    for (const k of keys) {
+      if (!k) continue;
+      if (row[k] !== undefined) return row[k];
+
+      const target = String(k).trim().toLowerCase().replace(/\s+/g, " ");
+      for (const rk of Object.keys(row)) {
+        const norm = String(rk).trim().toLowerCase().replace(/\s+/g, " ");
+        if (norm === target) return row[rk];
+      }
+    }
+    return "";
   }
 
   function getCamItemsFromRow(row) {
@@ -750,6 +809,59 @@
     return items;
   }
 
+  function collectSpeedCameraItems(rows) {
+    const out = [];
+    const seen = new Set();
+
+    for (const row of (rows || [])) {
+      const items = getCamItemsFromRow(row);
+      for (const it of (items || [])) {
+        const key = String(it.text || "").trim().toLowerCase();
+        if (!key) continue;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push({ text: it.text, type: it.type });
+      }
+    }
+    return out;
+  }
+
+  function escapeHtml(s) {
+    return String(s ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function escapeAttr(s) {
+    return String(s ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/"/g, "&quot;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+
+  // opts.ignoreFilters: when true, do NOT dim based on cam filter toggles
+  function speedCamerasHtmlCombined(rows, opts = {}) {
+    const ignoreFilters = !!opts.ignoreFilters;
+    const items = collectSpeedCameraItems(rows);
+    if (!items.length) return "";
+
+    const lis = items.map(it => {
+      const enabled = ignoreFilters ? true : selectedFilters.has(it.type);
+      return `<li class="${enabled ? "" : "cam-off"}">${escapeHtml(it.text)}</li>`;
+    }).join("");
+
+    return `
+      <div class="record">
+        <div class="record-header">Speed Cameras</div>
+        <ul class="cam-list">${lis}</ul>
+      </div>
+    `;
+  }
+
   function rowMatchesCamType(row, camType) {
     const items = getCamItemsFromRow(row);
     if (items.length === 0) return false;
@@ -757,7 +869,7 @@
   }
 
   // =========================
-  // STATE
+  // STATE + MAP STATE
   // =========================
   let map, vgLayer, usGeojsonCache;
   let statesLayer = null;
@@ -768,6 +880,9 @@
   let canadaProvincesCache = null;
 
   let stateMode = false;
+
+  // state-mode-only speed cam rollup toggle
+  let stateCamRollup = false;
 
   let selectedId = null;
   let lastClickedProps = null;
@@ -784,6 +899,9 @@
   // Region data (US counties + Canada provinces)
   const rowsByGeoid = new Map();
 
+  // US state -> set of county GEOIDs
+  const regionKeysByState = new Map(); // ab -> Set<geoid>
+
   // Band sets (for styling)
   const hasX = new Set();
   const hasK = new Set();
@@ -793,8 +911,6 @@
   const hasKa338 = new Set();
   const hasKa347 = new Set();
   const hasKa355 = new Set();
-
-  // any-band (for default green look when ALL bands on and cams off)
   const hasAnyBand = new Set();
 
   // Cam sets (for styling + filtering)
@@ -819,7 +935,6 @@
   const stateHasKa338 = new Set();
   const stateHasKa347 = new Set();
   const stateHasKa355 = new Set();
-
   const stateHasAnyBand = new Set();
 
   const stateHasCamAny = new Set();
@@ -850,169 +965,9 @@
     document.getElementById("status").textContent = msg;
   }
 
-  function hasValid(v) {
-    if (v === undefined || v === null) return false;
-    const t = String(v).trim();
-    if (!t) return false;
-    return t.toLowerCase() !== "n/a";
-  }
-
   function isYes(v) {
     if (v === undefined || v === null) return false;
     return String(v).trim().toLowerCase() === "y";
-  }
-
-  function escapeHtml(s) {
-    return String(s ?? "")
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
-  }
-
-  function escapeAttr(s) {
-    return String(s ?? "")
-      .replace(/&/g, "&amp;")
-      .replace(/"/g, "&quot;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
-  }
-
-  function normalizeBreaksToNewlines(s) {
-    if (!hasValid(s)) return "";
-    let t = String(s);
-    t = t.replace(/&lt;\s*br\s*\/?\s*&gt;/gi, "\n");
-    t = t.replace(/<\s*br\s*\/?\s*>/gi, "\n");
-    t = t.replace(/\\n/g, "\n");
-    return t;
-  }
-
-  function formatMulti(value) {
-    if (!hasValid(value)) return "";
-    const raw = normalizeBreaksToNewlines(value);
-    return raw
-      .split(/;|\n/)
-      .map(s => s.trim())
-      .filter(Boolean)
-      .map(s => escapeHtml(s))
-      .join("<br>");
-  }
-
-  // =========================
-  // Notes/Special tactics formatting with clickable links
-  // =========================
-  function normalizeUrl_(raw) {
-    let u = String(raw || "").trim();
-    if (!u) return "";
-
-    if (/^www\./i.test(u)) u = "https://" + u;
-    u = u.replace(/[)\],.]+$/g, "");
-
-    try {
-      const parsed = new URL(u);
-      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return "";
-      return parsed.href;
-    } catch {
-      return "";
-    }
-  }
-
-  function hostFromUrl_(u) {
-    try {
-      return new URL(u).hostname.replace(/^www\./i, "");
-    } catch { return ""; }
-  }
-
-  function parseLinkLine_(line) {
-    const s = String(line || "").trim();
-    if (!s) return null;
-
-    // Label | URL
-    let m = s.match(/^(.+?)\s*\|\s*(\S+)\s*$/);
-    if (m) {
-      const url = normalizeUrl_(m[2]);
-      if (!url) return null;
-      return { label: m[1].trim(), url };
-    }
-
-    // Markdown [Label](URL)
-    m = s.match(/^\[([^\]]+?)\]\(([^)]+)\)\s*$/);
-    if (m) {
-      const url = normalizeUrl_(m[2]);
-      if (!url) return null;
-      return { label: m[1].trim(), url };
-    }
-
-    // URL only
-    m = s.match(/^(\S+)$/);
-    if (m) {
-      const url = normalizeUrl_(m[1]);
-      if (!url) return null;
-      return { label: hostFromUrl_(url) || "Link", url };
-    }
-
-    // Label + URL at end
-    m = s.match(/^(.*?)(https?:\/\/\S+|www\.\S+)\s*$/i);
-    if (m) {
-      const url = normalizeUrl_(m[2]);
-      if (!url) return null;
-      const label = (m[1] || "").trim().replace(/[-–—:|]+$/g, "").trim();
-      return { label: label || (hostFromUrl_(url) || "Link"), url };
-    }
-
-    return null;
-  }
-
-  function formatNotesWithLinks(value) {
-    if (!hasValid(value)) return "";
-
-    const raw = normalizeBreaksToNewlines(value);
-    const parts = raw
-      .split(/;|\n/)
-      .map(s => s.trim())
-      .filter(Boolean);
-
-    if (parts.length === 0) return "";
-
-    const linesHtml = parts.map(p => {
-      const link = parseLinkLine_(p);
-      if (link) {
-        const host = hostFromUrl_(link.url);
-        return `
-          <div class="note-line">
-            <a class="note-link" href="${escapeAttr(link.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(link.label)}</a>
-            ${host ? `<span class="note-domain">(${escapeHtml(host)})</span>` : ""}
-          </div>
-        `;
-      }
-      return `<div class="note-line note-text">${escapeHtml(p)}</div>`;
-    });
-
-    return `<div class="notes-block">${linesHtml.join("")}</div>`;
-  }
-
-  function getField(row, ...keys) {
-    for (const k of keys) {
-      if (!k) continue;
-      if (row[k] !== undefined) return row[k];
-
-      const target = String(k).trim().toLowerCase().replace(/\s+/g, " ");
-      for (const rk of Object.keys(row)) {
-        const norm = String(rk).trim().toLowerCase().replace(/\s+/g, " ");
-        if (norm === target) return row[rk];
-      }
-    }
-    return "";
-  }
-
-  function containsDE(val) {
-    if (!hasValid(val)) return false;
-    const s = String(val);
-    return (
-      /\bDE[A-Z0-9_-]*\b/i.test(s) ||
-      /\bdragon\s*eye\b/i.test(s)
-    );
   }
 
   function matchAnyRegex(text, regexList) {
@@ -1027,6 +982,15 @@
       f347: matchAnyRegex(kaText, KA_347),
       f355: matchAnyRegex(kaText, KA_355)
     };
+  }
+
+  function containsDE(val) {
+    if (!hasValid(val)) return false;
+    const s = String(val);
+    return (
+      /\bDE[A-Z0-9_-]*\b/i.test(s) ||
+      /\bdragon\s*eye\b/i.test(s)
+    );
   }
 
   // ===== US GEOID NORMALIZER (5-digit FIPS) =====
@@ -1147,6 +1111,110 @@
     return STATE_NAME_MAP[ab] || ab || "Unknown";
   }
 
+  function formatMulti(value) {
+    if (!hasValid(value)) return "";
+    const raw = normalizeBreaksToNewlines(value);
+    return raw
+      .split(/;|\n/)
+      .map(s => s.trim())
+      .filter(Boolean)
+      .map(s => escapeHtml(s))
+      .join("<br>");
+  }
+
+  // =========================
+  // Notes/Special tactics formatting with clickable links
+  // =========================
+  function normalizeUrl_(raw) {
+    let u = String(raw || "").trim();
+    if (!u) return "";
+
+    if (/^www\./i.test(u)) u = "https://" + u;
+    u = u.replace(/[)\],.]+$/g, "");
+
+    try {
+      const parsed = new URL(u);
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return "";
+      return parsed.href;
+    } catch {
+      return "";
+    }
+  }
+
+  function hostFromUrl_(u) {
+    try {
+      return new URL(u).hostname.replace(/^www\./i, "");
+    } catch { return ""; }
+  }
+
+  function parseLinkLine_(line) {
+    const s = String(line || "").trim();
+    if (!s) return null;
+
+    // Label | URL
+    let m = s.match(/^(.+?)\s*\|\s*(\S+)\s*$/);
+    if (m) {
+      const url = normalizeUrl_(m[2]);
+      if (!url) return null;
+      return { label: m[1].trim(), url };
+    }
+
+    // Markdown [Label](URL)
+    m = s.match(/^\[([^\]]+?)\]\(([^)]+)\)\s*$/);
+    if (m) {
+      const url = normalizeUrl_(m[2]);
+      if (!url) return null;
+      return { label: m[1].trim(), url };
+    }
+
+    // URL only
+    m = s.match(/^(\S+)$/);
+    if (m) {
+      const url = normalizeUrl_(m[1]);
+      if (!url) return null;
+      return { label: hostFromUrl_(url) || "Link", url };
+    }
+
+    // Label + URL at end
+    m = s.match(/^(.*?)(https?:\/\/\S+|www\.\S+)\s*$/i);
+    if (m) {
+      const url = normalizeUrl_(m[2]);
+      if (!url) return null;
+      const label = (m[1] || "").trim().replace(/[-–—:|]+$/g, "").trim();
+      return { label: label || (hostFromUrl_(url) || "Link"), url };
+    }
+
+    return null;
+  }
+
+  function formatNotesWithLinks(value) {
+    if (!hasValid(value)) return "";
+
+    const raw = normalizeBreaksToNewlines(value);
+    const parts = raw
+      .split(/;|\n/)
+      .map(s => s.trim())
+      .filter(Boolean);
+
+    if (parts.length === 0) return "";
+
+    const linesHtml = parts.map(p => {
+      const link = parseLinkLine_(p);
+      if (link) {
+        const host = hostFromUrl_(link.url);
+        return `
+          <div class="note-line">
+            <a class="note-link" href="${escapeAttr(link.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(link.label)}</a>
+            ${host ? `<span class="note-domain">(${escapeHtml(host)})</span>` : ""}
+          </div>
+        `;
+      }
+      return `<div class="note-line note-text">${escapeHtml(p)}</div>`;
+    });
+
+    return `<div class="notes-block">${linesHtml.join("")}</div>`;
+  }
+
   function flagsHtmlFromRow(row) {
     const overpass = isYes(getField(row, "Overpass_shots", "Overpass shots", "Overpass"));
     const rear     = isYes(getField(row, "Rear_shots", "Rear shots", "Rear"));
@@ -1179,6 +1247,9 @@
     return false;
   }
 
+  // =========================
+  // FILTERING
+  // =========================
   function rowMatchesFilter(row, f) {
     // band filters
     if (f === "x") return hasValid(row["X_band"]);
@@ -1202,61 +1273,6 @@
     return (d.f338 || d.f347 || d.f355);
   }
 
-  function regionMatchesFilterSet(key, f) {
-    // bands
-    if (f === "x") return hasX.has(key);
-    if (f === "k") return hasK.has(key);
-    if (f === "ka") return hasKa.has(key);
-    if (f === "lidar") return hasLidar.has(key);
-    if (f === "de") return hasDE.has(key);
-
-    // cams
-    if (f === "cam_fmcw") return hasCamFmcw.has(key);
-    if (f === "cam_mrct") return hasCamMrct.has(key);
-    if (f === "cam_k") return hasCamK.has(key);
-    if (f === "cam_lidar") return hasCamLidar.has(key);
-    if (f === "cam_gatso") return hasCamGatso.has(key);
-    if (f === "cam_p2p") return hasCamP2p.has(key);
-
-    return false;
-  }
-
-  function regionMatchesKaFreqSet(key, choice) {
-    if (choice === "33.8") return hasKa338.has(key);
-    if (choice === "34.7") return hasKa347.has(key);
-    if (choice === "35.5") return hasKa355.has(key);
-    return (hasKa338.has(key) || hasKa347.has(key) || hasKa355.has(key));
-  }
-
-  function stateMatchesFilterSet(ab, f) {
-    // bands
-    if (f === "x") return stateHasX.has(ab);
-    if (f === "k") return stateHasK.has(ab);
-    if (f === "ka") return stateHasKa.has(ab);
-    if (f === "lidar") return stateHasLidar.has(ab);
-    if (f === "de") return stateHasDE.has(ab);
-
-    // cams
-    if (f === "cam_fmcw") return stateHasCamFmcw.has(ab);
-    if (f === "cam_mrct") return stateHasCamMrct.has(ab);
-    if (f === "cam_k") return stateHasCamK.has(ab);
-    if (f === "cam_lidar") return stateHasCamLidar.has(ab);
-    if (f === "cam_gatso") return stateHasCamGatso.has(ab);
-    if (f === "cam_p2p") return stateHasCamP2p.has(ab);
-
-    return false;
-  }
-
-  function stateMatchesKaFreqSet(ab, choice) {
-    if (choice === "33.8") return stateHasKa338.has(ab);
-    if (choice === "34.7") return stateHasKa347.has(ab);
-    if (choice === "35.5") return stateHasKa355.has(ab);
-    return (stateHasKa338.has(ab) || stateHasKa347.has(ab) || stateHasKa355.has(ab));
-  }
-
-  // =========================
-  // FILTERING RULE FOR LISTS + POPUPS
-  // =========================
   function passesCurrentFilters(row) {
     if (kaFreqMode) return rowMatchesKaFreq(row, kaFreqChoice);
     if (selectedFilters.size === 0) return false;
@@ -1269,6 +1285,43 @@
 
   function countMatchingRows(rows) {
     return (rows || []).filter(passesCurrentFilters).length;
+  }
+
+  // =========================
+  // STATE-WIDE SPEED CAMERA ROLLUP
+  // =========================
+  function buildRegionKeysByStateIndex() {
+    regionKeysByState.clear();
+
+    for (const [key, props] of regionPropsByKey.entries()) {
+      if (!props) continue;
+      if (String(key).toUpperCase().startsWith("CA-")) continue;
+
+      const ab = normalizeStateAbbrev(props.STUSPS || props.STATE || props.state || "");
+      if (!ab) continue;
+
+      if (!regionKeysByState.has(ab)) regionKeysByState.set(ab, new Set());
+      regionKeysByState.get(ab).add(key);
+    }
+  }
+
+  function getAllRowsForStateSpeedCams(ab) {
+    const out = [];
+
+    // 1) all county entries inside the state (COUNTY sheet)
+    const keys = regionKeysByState.get(ab);
+    if (keys) {
+      for (const geoid of keys) {
+        const rows = rowsByGeoid.get(geoid);
+        if (rows && rows.length) out.push(...rows);
+      }
+    }
+
+    // 2) state-level entries (STATE AGENCY sheet)
+    const stateRows = rowsByState.get(ab);
+    if (stateRows && stateRows.length) out.push(...stateRows);
+
+    return out;
   }
 
   // =========================
@@ -1295,7 +1348,7 @@
   }
 
   // =========================
-  // MOBILE SIDEBAR TOGGLE LOGIC + HINT (shows every reload on mobile)
+  // MOBILE SIDEBAR TOGGLE LOGIC + HINT
   // =========================
   const MOBILE_BREAKPOINT = 900;
   const sidebarEl = document.getElementById("sidebar");
@@ -1399,7 +1452,6 @@
       if (!rowsByGeoid.has(key)) rowsByGeoid.set(key, []);
       rowsByGeoid.get(key).push(row);
 
-      // band presence sets
       const hasBandThisRow =
         hasValid(row["X_band"]) ||
         hasValid(row["K_band"]) ||
@@ -1423,7 +1475,6 @@
 
       if (hasBandThisRow) hasAnyBand.add(key);
 
-      // cam presence sets
       const camItems = getCamItemsFromRow(row);
       if (camItems.length > 0) {
         hasCamAny.add(key);
@@ -1521,18 +1572,6 @@
   // =========================
   // REGION RENDER (US county OR Canada province)
   // =========================
-  function speedCamerasHtmlFromRow(row) {
-    const items = getCamItemsFromRow(row);
-    if (!items || items.length === 0) return "";
-
-    const lines = items.map(it => {
-      const enabled = selectedFilters.has(it.type);
-      return `<div class="cam-line ${enabled ? "" : "cam-off"}">- ${escapeHtml(it.text)}</div>`;
-    }).join("");
-
-    return `<div class="cam-lines"><div><strong>Speed Cameras</strong></div>${lines}</div>`;
-  }
-
   function renderRegionInfo(props) {
     const nameEl = document.getElementById("county-name");
     const recordsEl = document.getElementById("records");
@@ -1581,21 +1620,26 @@
         if (kVal)  bandsHtml += `<div style="margin-top:4px;">- <strong>K:</strong><br>${kVal}</div>`;
       }
 
-      const speedCamsHtml = speedCamerasHtmlFromRow(row);
-
       const div = document.createElement("div");
       div.className = "record" + (passes ? "" : " filtered-out");
       div.innerHTML = `
         <div class="record-header">${idx + 1}. ${agency}</div>
         ${bandsHtml}
         ${lidar ? `<div style="margin-top:6px;"><strong>Lidar:</strong><br>${lidar}</div>` : ""}
-        ${speedCamsHtml ? `<div style="margin-top:6px;">${speedCamsHtml}</div>` : ""}
         ${flags ? `${flags}` : ""}
         ${tactics ? `<div style="margin-top:6px;"><strong>Special tactics:</strong><br>${tactics}</div>` : ""}
         ${passes ? "" : `<div class="filtered-tag">Filtered out by current settings</div>`}
       `;
       recordsEl.appendChild(div);
     });
+
+    // County/province mode: combined cam section at bottom (dims based on cam filters)
+    const camSection = speedCamerasHtmlCombined(allRows);
+    if (camSection) {
+      const wrap = document.createElement("div");
+      wrap.innerHTML = camSection;
+      recordsEl.appendChild(wrap.firstElementChild);
+    }
 
     setSidebarOpen(false);
   }
@@ -1614,6 +1658,57 @@
     const agency = agencyRow ? escapeHtml(agencyRow["Law_Enforcement_Agency_Name"]) : "Unknown agency";
 
     return `<strong>${escapeHtml(tag ? `${name}, ${tag}` : name)}</strong><br>Main agency: ${agency}<br>${matchCount} record${matchCount===1?"":"s"} match current filters.`;
+  }
+
+  // =========================
+  // STYLING SETS (region/state)
+  // =========================
+  function regionMatchesFilterSet(key, f) {
+    if (f === "x") return hasX.has(key);
+    if (f === "k") return hasK.has(key);
+    if (f === "ka") return hasKa.has(key);
+    if (f === "lidar") return hasLidar.has(key);
+    if (f === "de") return hasDE.has(key);
+
+    if (f === "cam_fmcw") return hasCamFmcw.has(key);
+    if (f === "cam_mrct") return hasCamMrct.has(key);
+    if (f === "cam_k") return hasCamK.has(key);
+    if (f === "cam_lidar") return hasCamLidar.has(key);
+    if (f === "cam_gatso") return hasCamGatso.has(key);
+    if (f === "cam_p2p") return hasCamP2p.has(key);
+
+    return false;
+  }
+
+  function regionMatchesKaFreqSet(key, choice) {
+    if (choice === "33.8") return hasKa338.has(key);
+    if (choice === "34.7") return hasKa347.has(key);
+    if (choice === "35.5") return hasKa355.has(key);
+    return (hasKa338.has(key) || hasKa347.has(key) || hasKa355.has(key));
+  }
+
+  function stateMatchesFilterSet(ab, f) {
+    if (f === "x") return stateHasX.has(ab);
+    if (f === "k") return stateHasK.has(ab);
+    if (f === "ka") return stateHasKa.has(ab);
+    if (f === "lidar") return stateHasLidar.has(ab);
+    if (f === "de") return stateHasDE.has(ab);
+
+    if (f === "cam_fmcw") return stateHasCamFmcw.has(ab);
+    if (f === "cam_mrct") return stateHasCamMrct.has(ab);
+    if (f === "cam_k") return stateHasCamK.has(ab);
+    if (f === "cam_lidar") return stateHasCamLidar.has(ab);
+    if (f === "cam_gatso") return stateHasCamGatso.has(ab);
+    if (f === "cam_p2p") return stateHasCamP2p.has(ab);
+
+    return false;
+  }
+
+  function stateMatchesKaFreqSet(ab, choice) {
+    if (choice === "33.8") return stateHasKa338.has(ab);
+    if (choice === "34.7") return stateHasKa347.has(ab);
+    if (choice === "35.5") return stateHasKa355.has(ab);
+    return (stateHasKa338.has(ab) || stateHasKa347.has(ab) || stateHasKa355.has(ab));
   }
 
   // =========================
@@ -1641,7 +1736,6 @@
       return s;
     }
 
-    // Default look: ALL bands on AND no speed cam filters selected -> green for any band data
     if (bandAllOn() && !camAnyOn()) {
       if (hasAnyBand.has(geoid)) {
         s.fillColor = "#0B6623";
@@ -1658,18 +1752,29 @@
     }
     if (matches.length === 0) return s;
 
+        // ✅ If the matches are ONLY speed cameras (one or many), force brown.
+        const hasBandMatch = matches.some(isBandFilter);
+        const hasCamMatch  = matches.some(isCamFilter);
+        if (hasCamMatch && !hasBandMatch) {
+          s.fillColor = "#8B4513";
+          s.fillOpacity = 0.55;
+          return s;
+        }
+
     const colorMap = {
       x:"gold",
       k:"orange",
       ka:"blue",
       lidar:"red",
       de:"purple",
-      cam_fmcw:"#18a999",
-      cam_mrct:"#2f66ff",
-      cam_k:"#b86b00",
-      cam_lidar:"#ff4d4d",
-      cam_gatso:"#7c3aed",
-      cam_p2p:"#6b7280"
+
+      // ✅ all speed cams same color
+      cam_fmcw:"#8B4513",
+      cam_mrct:"#8B4513",
+      cam_k:"#8B4513",
+      cam_lidar:"#8B4513",
+      cam_gatso:"#8B4513",
+      cam_p2p:"#8B4513"
     };
 
     if (matches.length === 1) {
@@ -1685,7 +1790,7 @@
   }
 
   // =========================
-  // CANADA PROVINCE STYLE (Thick borders like US states)
+  // CANADA PROVINCE STYLE
   // =========================
   function styleForCanadaProvinceFeature(feature) {
     const p = (feature && feature.properties) ? feature.properties : {};
@@ -1736,18 +1841,29 @@
       return s;
     }
 
+        // ✅ Cam-only selection stays brown even if multiple cam types match
+        const hasBandMatch = matches.some(isBandFilter);
+        const hasCamMatch  = matches.some(isCamFilter);
+        if (hasCamMatch && !hasBandMatch) {
+          s.fillColor = "#8B4513";
+          s.fillOpacity = 0.35;
+          return s;
+        }
+
     const colorMap = {
       x:"gold",
       k:"orange",
       ka:"blue",
       lidar:"red",
       de:"purple",
-      cam_fmcw:"#18a999",
-      cam_mrct:"#2f66ff",
-      cam_k:"#b86b00",
-      cam_lidar:"#ff4d4d",
-      cam_gatso:"#7c3aed",
-      cam_p2p:"#6b7280"
+
+      // ✅ all speed cams same color (brown)
+      cam_fmcw:"#8B4513",
+      cam_mrct:"#8B4513",
+      cam_k:"#8B4513",
+      cam_lidar:"#8B4513",
+      cam_gatso:"#8B4513",
+      cam_p2p:"#8B4513"
     };
 
     if (matches.length === 1) {
@@ -1767,7 +1883,7 @@
   }
 
   // =========================
-  // STATE STYLE (FILL ONLY IN STATE MODE + FILTERING)
+  // STATE STYLE (FILL ONLY IN STATE MODE)
   // =========================
   function styleForStateFeature(feature) {
     const p = (feature && feature.properties) ? feature.properties : {};
@@ -1817,18 +1933,29 @@
       return s;
     }
 
+        // ✅ Cam-only selection stays brown even if multiple cam types match
+        const hasBandMatch = matches.some(isBandFilter);
+        const hasCamMatch  = matches.some(isCamFilter);
+        if (hasCamMatch && !hasBandMatch) {
+          s.fillColor = "#8B4513";
+          s.fillOpacity = 0.35;
+          return s;
+        }
+
     const colorMap = {
       x:"gold",
       k:"orange",
       ka:"blue",
       lidar:"red",
       de:"purple",
-      cam_fmcw:"#18a999",
-      cam_mrct:"#2f66ff",
-      cam_k:"#b86b00",
-      cam_lidar:"#ff4d4d",
-      cam_gatso:"#7c3aed",
-      cam_p2p:"#6b7280"
+
+      // ✅ all speed cams same color (brown)
+      cam_fmcw:"#8B4513",
+      cam_mrct:"#8B4513",
+      cam_k:"#8B4513",
+      cam_lidar:"#8B4513",
+      cam_gatso:"#8B4513",
+      cam_p2p:"#8B4513"
     };
 
     if (matches.length === 1) {
@@ -2055,10 +2182,33 @@
   function renderStateInfo(stateAbbrev) {
     const stateNameEl = document.getElementById("state-name");
     const stateRecordsEl = document.getElementById("state-records");
+    const stateTitleEl = document.getElementById("stateRecordsTitle");
 
     const fullName = STATE_NAME_MAP[stateAbbrev] || stateAbbrev || "Unknown";
     stateNameEl.textContent = `${fullName} (${stateAbbrev})`;
     stateRecordsEl.innerHTML = "";
+
+    // ✅ If State Cam List is ON: show ONLY speed cams (no agencies)
+    if (stateCamRollup) {
+      stateTitleEl.textContent = "Speed Cameras";
+
+      const allStateRows = getAllRowsForStateSpeedCams(stateAbbrev);
+      const camSection = speedCamerasHtmlCombined(allStateRows, { ignoreFilters: true });
+
+      if (camSection) {
+        const wrap = document.createElement("div");
+        wrap.innerHTML = camSection;
+        stateRecordsEl.appendChild(wrap.firstElementChild);
+      } else {
+        stateRecordsEl.innerHTML = "<p>No speed camera data for this state yet.</p>";
+      }
+
+      setSidebarOpen(false);
+      return;
+    }
+
+    // Normal state mode: agencies/records + state speed cams combined at bottom
+    stateTitleEl.textContent = "State Agencies / Records";
 
     const rows = rowsByState.get(stateAbbrev) || [];
 
@@ -2098,8 +2248,6 @@
         if (kVal)  bandsHtml += `<div style="margin-top:4px;">- <strong>K:</strong><br>${kVal}</div>`;
       }
 
-      const speedCamsHtml = speedCamerasHtmlFromRow(row);
-
       const passes = passesCurrentFilters(row);
 
       const div = document.createElement("div");
@@ -2108,7 +2256,6 @@
         <div class="record-header">${idx + 1}. ${agency}</div>
         ${bandsHtml}
         ${lidar ? `<div style="margin-top:6px;"><strong>Lidar:</strong><br>${lidar}</div>` : ""}
-        ${speedCamsHtml ? `<div style="margin-top:6px;">${speedCamsHtml}</div>` : ""}
         ${flags ? `${flags}` : ""}
         ${tactics ? `<div style="margin-top:6px;"><strong>Special tactics:</strong><br>${tactics}</div>` : ""}
         ${notes ? `<div style="margin-top:6px;"><strong>Notes:</strong><br>${notes}</div>` : ""}
@@ -2116,6 +2263,14 @@
       `;
       stateRecordsEl.appendChild(div);
     });
+
+    // show state-sheet speed cameras (combined) at the bottom in normal state mode
+    const stateCamSection = speedCamerasHtmlCombined(rows);
+    if (stateCamSection) {
+      const wrap = document.createElement("div");
+      wrap.innerHTML = stateCamSection;
+      stateRecordsEl.appendChild(wrap.firstElementChild);
+    }
 
     setSidebarOpen(false);
   }
@@ -2125,6 +2280,9 @@
   // =========================
   function setStateMode(on, opts = {}) {
     stateMode = !!on;
+
+    // leaving state mode -> force rollup OFF (state-only feature)
+    if (!stateMode) stateCamRollup = false;
 
     if (statesLayer) {
       statesLayer.eachLayer(layer => {
@@ -2224,6 +2382,12 @@
       setButtonActive(btn, selectedFilters.has(f));
       setButtonDisabled(btn, false);
     });
+
+    const rollBtn = document.getElementById("stateCamRollupBtn");
+    if (rollBtn) {
+      setButtonDisabled(rollBtn, !stateMode);
+      setButtonActive(rollBtn, stateMode && stateCamRollup);
+    }
   }
 
   function renderAllFilterButtons() {
@@ -2449,6 +2613,14 @@
       refreshCanadaStyle();
     });
 
+    // State cam rollup toggle
+    document.getElementById("stateCamRollupBtn").addEventListener("click", () => {
+      if (!stateMode) return;
+      stateCamRollup = !stateCamRollup;
+      renderAllFilterButtons();
+      if (lastClickedStateAbbrev) renderStateInfo(lastClickedStateAbbrev);
+    });
+
     // Band filter buttons
     document.querySelectorAll(".filter-btn[data-filter]").forEach(btn => {
       btn.addEventListener("click", async () => {
@@ -2457,7 +2629,6 @@
         const f = btn.getAttribute("data-filter");
 
         if (f === "all") {
-          // Toggle ALL bands only (does not touch speed cams)
           const allOn = bandAllOn();
           if (allOn) {
             for (const bf of BAND_FILTERS) selectedFilters.delete(bf);
@@ -2488,9 +2659,6 @@
         const f = btn.getAttribute("data-cam");
 
         if (f === "cam_all") {
-          // Proper toggle behavior:
-          // - if all cams on -> turn all off
-          // - otherwise -> turn all on
           const allOn = camAllOn();
           if (allOn) {
             for (const cf of CAM_FILTERS) selectedFilters.delete(cf);
@@ -2580,7 +2748,6 @@
         if (caRes.ok) {
           const caGeo = await caRes.json();
           canadaLoaded = true;
-
           setStatus("Building Canada provinces…");
           canadaProvincesCache = dissolveCanadaToProvinces(caGeo);
         } else {
@@ -2600,16 +2767,15 @@
       map.createPane("countiesPane");
       map.getPane("countiesPane").style.zIndex = 650;
 
-      // Index regions for search/zoom
       indexUsCountiesGeojson();
       if (canadaProvincesCache) indexCanadaProvincesGeojson();
 
-      // Add layers
+      buildRegionKeysByStateIndex();
+
       setStatus("Loading state borders…");
       await addStatesLayer();
       indexStatesGeojson();
 
-      // Canada provinces
       if (canadaProvincesCache) await addCanadaLayer();
 
       setTimeout(() => map.invalidateSize(), 0);
