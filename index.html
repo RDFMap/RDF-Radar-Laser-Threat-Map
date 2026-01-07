@@ -52,7 +52,7 @@
       display:flex;
       align-items:center;
       gap:6px;
-      flex-wrap:nowrap;
+      flex-wrap:wrap;
       overflow: visible;
     }
 
@@ -86,6 +86,54 @@
     .filter-btn.active .tick { visibility: visible; }
 
     .filter-btn.disabled { opacity: 0.45; cursor: not-allowed; }
+
+    /* === Speed cam UI (smaller) === */
+    .cam-controls {
+      margin-top: 10px;
+      border-top: 1px solid #eee;
+      padding-top: 10px;
+    }
+    .cam-title-row{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      margin-bottom: 8px;
+    }
+    .cam-title-row .filters-title{ margin:0; }
+
+    .cam-row{
+      display:flex;
+      align-items:center;
+      gap:6px;
+      flex-wrap:wrap;
+    }
+    .cam-btn{
+      min-width: 46px;
+      height: 30px;
+      padding: 3px 7px 3px;
+      border-radius: 10px;
+      border: 1px solid #d6d6d6;
+      background: #f6f6f6;
+      cursor: pointer;
+      user-select: none;
+      font-size: 10.5px;
+      line-height: 1.05;
+      display:inline-flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+    }
+    .cam-btn .label{ font-weight: 800; }
+    .cam-btn .tick{
+      margin-top: 1px;
+      font-size: 10px;
+      line-height: 10px;
+      visibility:hidden;
+    }
+    .cam-btn.active{ background:#222; color:#fff; border-color:#222; }
+    .cam-btn.active .tick{ visibility:visible; }
+    .cam-btn.disabled{ opacity:0.45; cursor:not-allowed; }
 
     .ka-split{
       position: relative;
@@ -207,6 +255,21 @@
     }
     .record-header { font-weight: 800; margin-bottom: 6px; }
 
+    .record.filtered-out{
+      opacity: 0.45;
+    }
+    .filtered-tag{
+      margin-top: 6px;
+      display:inline-flex;
+      padding: 4px 8px;
+      border-radius: 999px;
+      border: 1px solid #e1e1e1;
+      font-size: 11px;
+      font-weight: 750;
+      background: #f7f7f7;
+      color:#555;
+    }
+
     .flagline { margin-top: 6px; }
     .flagline div { margin-top: 3px; }
 
@@ -229,35 +292,40 @@
     }
     .note-text { white-space: normal; }
 
-    /* === Header (title/status left, links right) === */
+    /* Speed camera lines */
+    .cam-lines{ margin-top: 6px; }
+    .cam-line{
+      margin-top: 4px;
+      line-height: 1.25;
+      overflow-wrap:anywhere;
+      word-break: break-word;
+    }
+    .cam-line.cam-off{
+      opacity: 0.50;
+    }
+
+    /* === Header: keep simple. Links moved DOWN under status === */
     .header-row{
       display:flex;
       align-items:flex-start;
-      justify-content:space-between;
+      justify-content:flex-start;
       gap: 12px;
     }
     .header-left{ min-width: 0; }
-          .header-links{
+
+    .header-links{
+      margin-top: 10px;           /* <-- links moved down */
       display:flex;
       flex-direction:column;
-      align-items:flex-end;
+      align-items:flex-start;      /* left aligned */
       gap: 6px;
-      text-align:right;
-
-      /* IMPORTANT: give it room */
-      min-width: 140px;
-      max-width: 180px;
+      text-align:left;
     }
-
     .header-links a{
       font-size: 11px;
       font-weight: 600;
       line-height: 1.15;
       text-decoration: underline;
-
-      /* IMPORTANT: don't split words */
-      word-break: normal;
-      overflow-wrap: normal;
       white-space: nowrap;
     }
 
@@ -380,6 +448,19 @@
       }
       .filter-row { gap: 5px; }
 
+      /* even smaller cam buttons on mobile */
+      .cam-btn{
+        min-width: 44px;
+        height: 28px;
+        font-size: 10px;
+        padding: 3px 6px 3px;
+        border-radius: 9px;
+      }
+      .cam-btn .tick{
+        font-size: 10px;
+        line-height: 10px;
+      }
+
       /* Drawer-style sidebar overlay */
       #sidebar {
         position: fixed;
@@ -398,9 +479,8 @@
 
       body.no-scroll { overflow: hidden; }
 
-      /* Header links stack nicely on mobile */
+      /* Header links stack nicely on mobile (already stacked) */
       .header-row{ flex-direction:column; align-items:flex-start; }
-      .header-links{ align-items:flex-start; text-align:left; }
     }
   </style>
 </head>
@@ -423,15 +503,16 @@
         <div class="header-left">
           <h1>RDF Radar & Laser Threat Map</h1>
           <div id="status">Loading…</div>
-        </div>
 
-        <div class="header-links">
-          <a href="https://www.rdforum.org/threads/150468/" target="_blank" rel="noopener noreferrer">
-            RDForum Thread & Updates
-          </a>
-          <a href="https://forms.fillout.com/t/dsffrfAc4jus" target="_blank" rel="noopener noreferrer">
-            Have Data? Submit here
-          </a>
+          <!-- moved down: links are now under status -->
+          <div class="header-links">
+            <a href="https://www.rdforum.org/threads/150468/" target="_blank" rel="noopener noreferrer">
+              RDForum Thread & Updates
+            </a>
+            <a href="https://forms.fillout.com/t/dsffrfAc4jus" target="_blank" rel="noopener noreferrer">
+              Have Data? Submit here
+            </a>
+          </div>
         </div>
       </div>
     </div>
@@ -493,6 +574,37 @@
           State Mode is on. Click a state to view state agencies.
         </div>
       </div>
+
+      <!-- SPEED CAM UI -->
+      <div class="cam-controls">
+        <div class="cam-title-row">
+          <div class="filters-title">Speed Cameras:</div>
+        </div>
+
+        <div class="cam-row" id="camFilterBar">
+          <button class="cam-btn" data-cam="cam_all" type="button">
+            <div class="label">All</div><div class="tick">✅</div>
+          </button>
+          <button class="cam-btn" data-cam="cam_fmcw" type="button">
+            <div class="label">FMCW</div><div class="tick">✅</div>
+          </button>
+          <button class="cam-btn" data-cam="cam_mrct" type="button">
+            <div class="label">MRCT</div><div class="tick">✅</div>
+          </button>
+          <button class="cam-btn" data-cam="cam_k" type="button">
+            <div class="label">K</div><div class="tick">✅</div>
+          </button>
+          <button class="cam-btn" data-cam="cam_lidar" type="button">
+            <div class="label">LiDAR</div><div class="tick">✅</div>
+          </button>
+          <button class="cam-btn" data-cam="cam_gatso" type="button">
+            <div class="label">Gatso</div><div class="tick">✅</div>
+          </button>
+          <button class="cam-btn" data-cam="cam_p2p" type="button">
+            <div class="label">P2P</div><div class="tick">✅</div>
+          </button>
+        </div>
+      </div>
     </div>
 
     <div class="panel" id="countyPanel">
@@ -546,7 +658,17 @@
   const DEFAULT_CENTER = [39.5, -98.35];
   const DEFAULT_ZOOM = 4;
 
-  const FILTERS = ["x", "k", "ka", "lidar", "de"];
+  // Band filters
+  const BAND_FILTERS = ["x", "k", "ka", "lidar", "de"];
+
+  // Speed camera filters
+  const CAM_FILTERS = ["cam_fmcw", "cam_mrct", "cam_k", "cam_lidar", "cam_gatso", "cam_p2p"];
+
+  // Map colors look clean when all BAND filters are on and cams are off:
+  // we keep the "green for any band data" behavior in that specific case.
+  function bandAllOn() { return BAND_FILTERS.every(f => selectedFilters.has(f)); }
+  function camAllOn()  { return CAM_FILTERS.every(f => selectedFilters.has(f)); }
+  function camAnyOn()  { return CAM_FILTERS.some(f => selectedFilters.has(f)); }
 
   const STATE_NAME_MAP = {
     AL:"Alabama", AK:"Alaska", AZ:"Arizona", AR:"Arkansas", CA:"California", CO:"Colorado", CT:"Connecticut", DE:"Delaware",
@@ -594,6 +716,47 @@
   ];
 
   // =========================
+  // SPEED CAMERA TYPE PARSING (based on your sheet tags)
+  // =========================
+  function camTypeFromText(text) {
+    const s = String(text || "");
+    if (/\(\s*fmcw\s*\)/i.test(s)) return "cam_fmcw";
+    if (/\(\s*mrct\s*\)/i.test(s)) return "cam_mrct";
+    if (/\(\s*k-?\s*band\s*\)/i.test(s)) return "cam_k";
+    if (/\(\s*lidar\s*\)/i.test(s)) return "cam_lidar";
+    if (/\(\s*gatso\s*\)/i.test(s)) return "cam_gatso";
+    if (/\(\s*point\s*-\s*2\s*-\s*point\s*\)/i.test(s) || /\(\s*point\s*2\s*point\s*\)/i.test(s)) return "cam_p2p";
+    return "cam_fmcw";
+  }
+
+  function normalizeCamParts(raw) {
+    if (!hasValid(raw)) return [];
+    const t = normalizeBreaksToNewlines(raw);
+    return t
+      .split(/;|\n/)
+      .map(s => s.trim())
+      .filter(Boolean);
+  }
+
+  function getCamItemsFromRow(row) {
+    if (!row) return [];
+    if (Array.isArray(row.__camItems)) return row.__camItems;
+
+    const raw = getField(row, "SpeedCameras", "Speed Cameras", "Speed_Cameras", "Speed Camera", "SpeedCamera", "Cameras");
+    const parts = normalizeCamParts(raw);
+
+    const items = parts.map(p => ({ text: p, type: camTypeFromText(p) }));
+    row.__camItems = items;
+    return items;
+  }
+
+  function rowMatchesCamType(row, camType) {
+    const items = getCamItemsFromRow(row);
+    if (items.length === 0) return false;
+    return items.some(it => it.type === camType);
+  }
+
+  // =========================
   // STATE
   // =========================
   let map, vgLayer, usGeojsonCache;
@@ -609,18 +772,19 @@
   let selectedId = null;
   let lastClickedProps = null;
 
-  // Normal filters
-  let allMode = true;
-  let selectedFilters = new Set(FILTERS);
+  // Filters
+  // DEFAULT: bands ON, speed cams OFF
+  let selectedFilters = new Set(BAND_FILTERS);
 
   // Ka freq mode
   let kaFreqMode = false;
   let kaFreqChoice = "any";
-  let savedAllMode = true;
-  let savedSelectedFilters = new Set(FILTERS);
+  let savedSelectedFilters = new Set(BAND_FILTERS);
 
   // Region data (US counties + Canada provinces)
   const rowsByGeoid = new Map();
+
+  // Band sets (for styling)
   const hasX = new Set();
   const hasK = new Set();
   const hasKa = new Set();
@@ -629,7 +793,18 @@
   const hasKa338 = new Set();
   const hasKa347 = new Set();
   const hasKa355 = new Set();
-  const hasAnyData = new Set();
+
+  // any-band (for default green look when ALL bands on and cams off)
+  const hasAnyBand = new Set();
+
+  // Cam sets (for styling + filtering)
+  const hasCamAny = new Set();
+  const hasCamFmcw = new Set();
+  const hasCamMrct = new Set();
+  const hasCamK = new Set();
+  const hasCamLidar = new Set();
+  const hasCamGatso = new Set();
+  const hasCamP2p = new Set();
 
   // State agency data
   const rowsByState = new Map();
@@ -645,6 +820,16 @@
   const stateHasKa347 = new Set();
   const stateHasKa355 = new Set();
 
+  const stateHasAnyBand = new Set();
+
+  const stateHasCamAny = new Set();
+  const stateHasCamFmcw = new Set();
+  const stateHasCamMrct = new Set();
+  const stateHasCamK = new Set();
+  const stateHasCamLidar = new Set();
+  const stateHasCamGatso = new Set();
+  const stateHasCamP2p = new Set();
+
   // Lookups for zooming / search (US + Canada)
   const regionPropsByKey = new Map();   // key -> props
   const regionBoundsByKey = new Map();  // key -> LatLngBounds
@@ -659,7 +844,7 @@
   let canadaLoaded = false;
 
   // =========================
-  // HELPERS (SAFE HTML + BR FIX)
+  // HELPERS
   // =========================
   function setStatus(msg) {
     document.getElementById("status").textContent = msg;
@@ -874,7 +1059,6 @@
   function normalizeCanadaPruid2(v) {
     const raw = String(v ?? "").trim();
     if (!raw) return "";
-    // IMPORTANT: do NOT slice last 2 digits; only accept clean 1–2 digit PRUID
     if (/^\d{1,2}$/.test(raw)) return raw.padStart(2, "0");
     const digits = raw.replace(/\D/g, "");
     if (/^\d{1,2}$/.test(digits) && digits.length === raw.replace(/\s/g,"").length) {
@@ -887,27 +1071,21 @@
     const state = String(stateMaybe ?? "").trim().toUpperCase();
     const t0 = String(geo ?? "").trim();
 
-    // If they already entered CA-##
     if (/^CA-\d{1,2}$/i.test(t0)) {
       const pr = t0.split("-")[1];
       return "CA-" + String(pr).padStart(2, "0");
     }
 
-    // Only treat as Canada if State says CANADA (prevents false parsing)
     if (state !== "CANADA") return "";
 
-    // allow plain PRUID like "10"
     if (/^\d{1,2}$/.test(t0)) return "CA-" + t0.padStart(2, "0");
 
-    // allow province abbrev like "ON" (only because State=CANADA)
     const ab = t0.toUpperCase();
     if (CA_KEY_BY_ABBR[ab]) return "CA-" + CA_KEY_BY_ABBR[ab].padStart(2,"0");
 
-    // allow province name in GEOID cell
     const nm = t0.toLowerCase();
     if (CA_KEY_BY_NAME[nm]) return "CA-" + CA_KEY_BY_NAME[nm].padStart(2,"0");
 
-    // allow province name in Name cell (if GEOID cell blank/messy)
     const nm2 = String(nameMaybe ?? "").trim().toLowerCase();
     if (CA_KEY_BY_NAME[nm2]) return "CA-" + CA_KEY_BY_NAME[nm2].padStart(2,"0");
 
@@ -1002,11 +1180,16 @@
   }
 
   function rowMatchesFilter(row, f) {
+    // band filters
     if (f === "x") return hasValid(row["X_band"]);
     if (f === "k") return hasValid(row["K_band"]);
     if (f === "ka") return hasValid(row["Ka_band"]);
     if (f === "lidar") return hasValid(row["Lidar_Guns"]);
     if (f === "de") return containsDE(row["Lidar_Guns"]);
+
+    // cam filters
+    if (CAM_FILTERS.includes(f)) return rowMatchesCamType(row, f);
+
     return false;
   }
 
@@ -1020,11 +1203,21 @@
   }
 
   function regionMatchesFilterSet(key, f) {
+    // bands
     if (f === "x") return hasX.has(key);
     if (f === "k") return hasK.has(key);
     if (f === "ka") return hasKa.has(key);
     if (f === "lidar") return hasLidar.has(key);
     if (f === "de") return hasDE.has(key);
+
+    // cams
+    if (f === "cam_fmcw") return hasCamFmcw.has(key);
+    if (f === "cam_mrct") return hasCamMrct.has(key);
+    if (f === "cam_k") return hasCamK.has(key);
+    if (f === "cam_lidar") return hasCamLidar.has(key);
+    if (f === "cam_gatso") return hasCamGatso.has(key);
+    if (f === "cam_p2p") return hasCamP2p.has(key);
+
     return false;
   }
 
@@ -1036,11 +1229,21 @@
   }
 
   function stateMatchesFilterSet(ab, f) {
+    // bands
     if (f === "x") return stateHasX.has(ab);
     if (f === "k") return stateHasK.has(ab);
     if (f === "ka") return stateHasKa.has(ab);
     if (f === "lidar") return stateHasLidar.has(ab);
     if (f === "de") return stateHasDE.has(ab);
+
+    // cams
+    if (f === "cam_fmcw") return stateHasCamFmcw.has(ab);
+    if (f === "cam_mrct") return stateHasCamMrct.has(ab);
+    if (f === "cam_k") return stateHasCamK.has(ab);
+    if (f === "cam_lidar") return stateHasCamLidar.has(ab);
+    if (f === "cam_gatso") return stateHasCamGatso.has(ab);
+    if (f === "cam_p2p") return stateHasCamP2p.has(ab);
+
     return false;
   }
 
@@ -1049,6 +1252,23 @@
     if (choice === "34.7") return stateHasKa347.has(ab);
     if (choice === "35.5") return stateHasKa355.has(ab);
     return (stateHasKa338.has(ab) || stateHasKa347.has(ab) || stateHasKa355.has(ab));
+  }
+
+  // =========================
+  // FILTERING RULE FOR LISTS + POPUPS
+  // =========================
+  function passesCurrentFilters(row) {
+    if (kaFreqMode) return rowMatchesKaFreq(row, kaFreqChoice);
+    if (selectedFilters.size === 0) return false;
+
+    for (const f of selectedFilters) {
+      if (rowMatchesFilter(row, f)) return true;
+    }
+    return false;
+  }
+
+  function countMatchingRows(rows) {
+    return (rows || []).filter(passesCurrentFilters).length;
   }
 
   // =========================
@@ -1148,9 +1368,13 @@
     const parsed = Papa.parse(text, { header: true, skipEmptyLines: true });
 
     rowsByGeoid.clear();
+
     hasX.clear(); hasK.clear(); hasKa.clear(); hasLidar.clear(); hasDE.clear();
     hasKa338.clear(); hasKa347.clear(); hasKa355.clear();
-    hasAnyData.clear();
+    hasAnyBand.clear();
+
+    hasCamAny.clear();
+    hasCamFmcw.clear(); hasCamMrct.clear(); hasCamK.clear(); hasCamLidar.clear(); hasCamGatso.clear(); hasCamP2p.clear();
 
     for (const raw of parsed.data) {
       if (!raw) continue;
@@ -1158,15 +1382,11 @@
       const stateCell = getField(raw, "State", "STATE", "Country", "COUNTRY");
       const nameCell  = getField(raw, "County", "County_Name", "Province", "Province_Name", "Name");
 
-      // Canada rows: State=CANADA OR GEOID="CA-##"
       const caKey = normalizeCanadaKeyFromSheet(raw.GEOID, stateCell, nameCell);
 
       let key = "";
-      if (caKey) {
-        key = caKey;
-      } else {
-        key = normalizeUsGeoid(raw.GEOID);
-      }
+      if (caKey) key = caKey;
+      else key = normalizeUsGeoid(raw.GEOID);
 
       if (!key) continue;
 
@@ -1178,6 +1398,14 @@
 
       if (!rowsByGeoid.has(key)) rowsByGeoid.set(key, []);
       rowsByGeoid.get(key).push(row);
+
+      // band presence sets
+      const hasBandThisRow =
+        hasValid(row["X_band"]) ||
+        hasValid(row["K_band"]) ||
+        hasValid(row["Ka_band"]) ||
+        hasValid(row["Lidar_Guns"]) ||
+        containsDE(row["Lidar_Guns"]);
 
       if (hasValid(row["X_band"])) hasX.add(key);
       if (hasValid(row["K_band"])) hasK.add(key);
@@ -1193,7 +1421,21 @@
       if (hasValid(row["Lidar_Guns"])) hasLidar.add(key);
       if (containsDE(row["Lidar_Guns"])) hasDE.add(key);
 
-      if (rowHasAnyContent(row)) hasAnyData.add(key);
+      if (hasBandThisRow) hasAnyBand.add(key);
+
+      // cam presence sets
+      const camItems = getCamItemsFromRow(row);
+      if (camItems.length > 0) {
+        hasCamAny.add(key);
+        for (const it of camItems) {
+          if (it.type === "cam_fmcw") hasCamFmcw.add(key);
+          if (it.type === "cam_mrct") hasCamMrct.add(key);
+          if (it.type === "cam_k") hasCamK.add(key);
+          if (it.type === "cam_lidar") hasCamLidar.add(key);
+          if (it.type === "cam_gatso") hasCamGatso.add(key);
+          if (it.type === "cam_p2p") hasCamP2p.add(key);
+        }
+      }
     }
   }
 
@@ -1208,8 +1450,13 @@
     const parsed = Papa.parse(text, { header: true, skipEmptyLines: true });
 
     rowsByState.clear();
+
     stateHasX.clear(); stateHasK.clear(); stateHasKa.clear(); stateHasLidar.clear(); stateHasDE.clear();
     stateHasKa338.clear(); stateHasKa347.clear(); stateHasKa355.clear();
+    stateHasAnyBand.clear();
+
+    stateHasCamAny.clear();
+    stateHasCamFmcw.clear(); stateHasCamMrct.clear(); stateHasCamK.clear(); stateHasCamLidar.clear(); stateHasCamGatso.clear(); stateHasCamP2p.clear();
 
     for (const raw of parsed.data) {
       if (!raw) continue;
@@ -1233,6 +1480,13 @@
       if (!rowsByState.has(ab)) rowsByState.set(ab, []);
       rowsByState.get(ab).push(row);
 
+      const hasBandThisRow =
+        hasValid(row["X_band"]) ||
+        hasValid(row["K_band"]) ||
+        hasValid(row["Ka_band"]) ||
+        hasValid(row["Lidar_Guns"]) ||
+        containsDE(row["Lidar_Guns"]);
+
       if (hasValid(row["X_band"])) stateHasX.add(ab);
       if (hasValid(row["K_band"])) stateHasK.add(ab);
 
@@ -1246,26 +1500,39 @@
 
       if (hasValid(row["Lidar_Guns"])) stateHasLidar.add(ab);
       if (containsDE(row["Lidar_Guns"])) stateHasDE.add(ab);
-    }
-  }
 
-  // =========================
-  // FILTERING
-  // =========================
-  function passesCurrentFilters(row) {
-    if (kaFreqMode) return rowMatchesKaFreq(row, kaFreqChoice);
-    if (allMode) return rowHasAnyContent(row);
-    if (selectedFilters.size === 0) return false;
+      if (hasBandThisRow) stateHasAnyBand.add(ab);
 
-    for (const f of selectedFilters) {
-      if (rowMatchesFilter(row, f)) return true;
+      const camItems = getCamItemsFromRow(row);
+      if (camItems.length > 0) {
+        stateHasCamAny.add(ab);
+        for (const it of camItems) {
+          if (it.type === "cam_fmcw") stateHasCamFmcw.add(ab);
+          if (it.type === "cam_mrct") stateHasCamMrct.add(ab);
+          if (it.type === "cam_k") stateHasCamK.add(ab);
+          if (it.type === "cam_lidar") stateHasCamLidar.add(ab);
+          if (it.type === "cam_gatso") stateHasCamGatso.add(ab);
+          if (it.type === "cam_p2p") stateHasCamP2p.add(ab);
+        }
+      }
     }
-    return false;
   }
 
   // =========================
   // REGION RENDER (US county OR Canada province)
   // =========================
+  function speedCamerasHtmlFromRow(row) {
+    const items = getCamItemsFromRow(row);
+    if (!items || items.length === 0) return "";
+
+    const lines = items.map(it => {
+      const enabled = selectedFilters.has(it.type);
+      return `<div class="cam-line ${enabled ? "" : "cam-off"}">- ${escapeHtml(it.text)}</div>`;
+    }).join("");
+
+    return `<div class="cam-lines"><div><strong>Speed Cameras</strong></div>${lines}</div>`;
+  }
+
   function renderRegionInfo(props) {
     const nameEl = document.getElementById("county-name");
     const recordsEl = document.getElementById("records");
@@ -1283,16 +1550,17 @@
       return;
     }
 
-    const all = rowsByGeoid.get(key) || [];
-    const filtered = all.filter(passesCurrentFilters);
+    const allRows = rowsByGeoid.get(key) || [];
 
-    if (filtered.length === 0) {
+    if (allRows.length === 0) {
       recordsEl.innerHTML = "<p>No data for this region yet.</p>";
       setSidebarOpen(false);
       return;
     }
 
-    filtered.forEach((row, idx) => {
+    allRows.forEach((row, idx) => {
+      if (!rowHasAnyContent(row)) return;
+
       const agency = escapeHtml(row["Law_Enforcement_Agency_Name"] || "Unknown agency");
 
       const xVal  = hasValid(row["X_band"])  ? formatMulti(row["X_band"])  : "";
@@ -1300,12 +1568,10 @@
       const kVal  = hasValid(row["K_band"])  ? formatMulti(row["K_band"])  : "";
       const lidar = hasValid(row["Lidar_Guns"]) ? formatMulti(row["Lidar_Guns"]) : "";
 
-      // Speed Cameras (from CSV)
-      const speedCamerasRaw = getField(row, "SpeedCameras", "Speed Cameras", "Speed_Cameras", "Speed Camera", "SpeedCamera", "Cameras");
-      const speedCameras = hasValid(speedCamerasRaw) ? formatMulti(speedCamerasRaw) : "";
-
       const tactics = hasValid(row["Special_Tactics"]) ? formatNotesWithLinks(row["Special_Tactics"]) : "";
       const flags = flagsHtmlFromRow(row);
+
+      const passes = passesCurrentFilters(row);
 
       let bandsHtml = "";
       if (xVal || kaVal || kVal) {
@@ -1315,15 +1581,18 @@
         if (kVal)  bandsHtml += `<div style="margin-top:4px;">- <strong>K:</strong><br>${kVal}</div>`;
       }
 
+      const speedCamsHtml = speedCamerasHtmlFromRow(row);
+
       const div = document.createElement("div");
-      div.className = "record";
+      div.className = "record" + (passes ? "" : " filtered-out");
       div.innerHTML = `
         <div class="record-header">${idx + 1}. ${agency}</div>
         ${bandsHtml}
         ${lidar ? `<div style="margin-top:6px;"><strong>Lidar:</strong><br>${lidar}</div>` : ""}
-        ${speedCameras ? `<div style="margin-top:6px;"><strong>Speed Cameras:</strong><br>${speedCameras}</div>` : ""}
+        ${speedCamsHtml ? `<div style="margin-top:6px;">${speedCamsHtml}</div>` : ""}
         ${flags ? `${flags}` : ""}
         ${tactics ? `<div style="margin-top:6px;"><strong>Special tactics:</strong><br>${tactics}</div>` : ""}
+        ${passes ? "" : `<div class="filtered-tag">Filtered out by current settings</div>`}
       `;
       recordsEl.appendChild(div);
     });
@@ -1339,12 +1608,12 @@
     if (!key) return `<strong>${escapeHtml(tag ? `${name}, ${tag}` : name)}</strong>`;
 
     const all = rowsByGeoid.get(key) || [];
-    const row = all.find(passesCurrentFilters);
+    const matchCount = countMatchingRows(all);
 
-    if (!row) return `<strong>${escapeHtml(tag ? `${name}, ${tag}` : name)}</strong><br>No data for the selected filters.`;
+    const agencyRow = all.find(r => hasValid(r["Law_Enforcement_Agency_Name"])) || null;
+    const agency = agencyRow ? escapeHtml(agencyRow["Law_Enforcement_Agency_Name"]) : "Unknown agency";
 
-    const agency = escapeHtml(row["Law_Enforcement_Agency_Name"] || "Unknown agency");
-    return `<strong>${escapeHtml(tag ? `${name}, ${tag}` : name)}</strong><br>Main agency: ${agency}`;
+    return `<strong>${escapeHtml(tag ? `${name}, ${tag}` : name)}</strong><br>Main agency: ${agency}<br>${matchCount} record${matchCount===1?"":"s"} match current filters.`;
   }
 
   // =========================
@@ -1372,10 +1641,11 @@
       return s;
     }
 
-    if (allMode) {
-      if (hasAnyData.has(geoid)) {
+    // Default look: ALL bands on AND no speed cam filters selected -> green for any band data
+    if (bandAllOn() && !camAnyOn()) {
+      if (hasAnyBand.has(geoid)) {
         s.fillColor = "#0B6623";
-        s.fillOpacity = 0.7;
+        s.fillOpacity = 0.70;
       }
       return s;
     }
@@ -1383,13 +1653,24 @@
     if (selectedFilters.size === 0) return s;
 
     const matches = [];
-    for (const f of FILTERS) {
-      if (!selectedFilters.has(f)) continue;
+    for (const f of selectedFilters) {
       if (regionMatchesFilterSet(geoid, f)) matches.push(f);
     }
     if (matches.length === 0) return s;
 
-    const colorMap = { x:"gold", k:"orange", ka:"blue", lidar:"red", de:"purple" };
+    const colorMap = {
+      x:"gold",
+      k:"orange",
+      ka:"blue",
+      lidar:"red",
+      de:"purple",
+      cam_fmcw:"#18a999",
+      cam_mrct:"#2f66ff",
+      cam_k:"#b86b00",
+      cam_lidar:"#ff4d4d",
+      cam_gatso:"#7c3aed",
+      cam_p2p:"#6b7280"
+    };
 
     if (matches.length === 1) {
       s.fillColor = colorMap[matches[0]] || "green";
@@ -1410,7 +1691,6 @@
     const p = (feature && feature.properties) ? feature.properties : {};
     const key = regionKeyFromProps(p);
 
-    // thick outline always
     const s = {
       color: "#000",
       weight: 4,
@@ -1421,9 +1701,7 @@
       fillOpacity: 0.0
     };
 
-    // clickable only in county mode
     if (stateMode) return s;
-
     if (!key) return s;
 
     if (kaFreqMode) {
@@ -1436,10 +1714,12 @@
       return s;
     }
 
-    if (allMode) {
-      if (hasAnyData.has(key)) {
+    if (bandAllOn() && !camAnyOn()) {
+      if (hasAnyBand.has(key)) {
         s.fillColor = "#0B6623";
         s.fillOpacity = 0.35;
+      } else {
+        s.fillOpacity = 0.0;
       }
       return s;
     }
@@ -1447,8 +1727,7 @@
     if (selectedFilters.size === 0) return s;
 
     const matches = [];
-    for (const f of FILTERS) {
-      if (!selectedFilters.has(f)) continue;
+    for (const f of selectedFilters) {
       if (regionMatchesFilterSet(key, f)) matches.push(f);
     }
 
@@ -1457,7 +1736,19 @@
       return s;
     }
 
-    const colorMap = { x:"gold", k:"orange", ka:"blue", lidar:"red", de:"purple" };
+    const colorMap = {
+      x:"gold",
+      k:"orange",
+      ka:"blue",
+      lidar:"red",
+      de:"purple",
+      cam_fmcw:"#18a999",
+      cam_mrct:"#2f66ff",
+      cam_k:"#b86b00",
+      cam_lidar:"#ff4d4d",
+      cam_gatso:"#7c3aed",
+      cam_p2p:"#6b7280"
+    };
 
     if (matches.length === 1) {
       s.fillColor = colorMap[matches[0]] || "green";
@@ -1492,7 +1783,6 @@
     };
 
     if (!stateMode) return s;
-    if (!kaFreqMode && allMode) return s;
     if (!ab) return s;
 
     if (kaFreqMode) {
@@ -1505,11 +1795,20 @@
       return s;
     }
 
+    if (bandAllOn() && !camAnyOn()) {
+      if (stateHasAnyBand.has(ab)) {
+        s.fillColor = "#0B6623";
+        s.fillOpacity = 0.35;
+      } else {
+        s.fillOpacity = 0.0;
+      }
+      return s;
+    }
+
     if (selectedFilters.size === 0) return s;
 
     const matches = [];
-    for (const f of FILTERS) {
-      if (!selectedFilters.has(f)) continue;
+    for (const f of selectedFilters) {
       if (stateMatchesFilterSet(ab, f)) matches.push(f);
     }
 
@@ -1518,7 +1817,19 @@
       return s;
     }
 
-    const colorMap = { x:"gold", k:"orange", ka:"blue", lidar:"red", de:"purple" };
+    const colorMap = {
+      x:"gold",
+      k:"orange",
+      ka:"blue",
+      lidar:"red",
+      de:"purple",
+      cam_fmcw:"#18a999",
+      cam_mrct:"#2f66ff",
+      cam_k:"#b86b00",
+      cam_lidar:"#ff4d4d",
+      cam_gatso:"#7c3aed",
+      cam_p2p:"#6b7280"
+    };
 
     if (matches.length === 1) {
       s.fillColor = colorMap[matches[0]] || "green";
@@ -1626,11 +1937,12 @@
           renderStateInfo(ab);
 
           const stateName = getStateNameFromProps(p, ab);
-          const count = (rowsByState.get(ab) || []).filter(passesCurrentFilters).length;
+          const rows = rowsByState.get(ab) || [];
+          const count = countMatchingRows(rows);
 
           L.popup()
             .setLatLng(e.latlng)
-            .setContent(`<strong>${escapeHtml(stateName)} (${escapeHtml(ab)})</strong><br>${count} state record${count===1?"":"s"} found (current filters).`)
+            .setContent(`<strong>${escapeHtml(stateName)} (${escapeHtml(ab)})</strong><br>${count} state record${count===1?"":"s"} match current filters.`)
             .openOn(map);
         });
       }
@@ -1663,7 +1975,6 @@
       const mp = geomToMultiPolyCoords(f.geometry);
       if (!mp) continue;
 
-      // polygon-clipping: MultiPolygon coords
       if (!groups.has(pr)) {
         groups.set(pr, mp);
       } else {
@@ -1672,7 +1983,6 @@
           const merged = polygonClipping.union(acc, mp);
           groups.set(pr, merged);
         } catch (e) {
-          // if union fails on a weird geometry, fall back to concatenating (still works for fills)
           groups.set(pr, acc.concat(mp));
         }
       }
@@ -1703,7 +2013,6 @@
   }
 
   async function addCanadaLayer() {
-    // pane between counties and states
     map.createPane("canadaPane");
     map.getPane("canadaPane").style.zIndex = 680;
 
@@ -1717,7 +2026,7 @@
       style: (feature) => styleForCanadaProvinceFeature(feature),
       onEachFeature: (feature, layer) => {
         layer.on("click", (e) => {
-          if (stateMode) return; // "only for Canada" clicks in county mode
+          if (stateMode) return;
 
           const p = (feature && feature.properties) ? feature.properties : {};
           lastClickedProps = p;
@@ -1725,12 +2034,13 @@
           renderRegionInfo(p);
 
           const key = regionKeyFromProps(p);
-          const count = (rowsByGeoid.get(key) || []).filter(passesCurrentFilters).length;
+          const rows = rowsByGeoid.get(key) || [];
+          const count = countMatchingRows(rows);
           const title = `${getRegionDisplayNameFromProps(p)}, CANADA`;
 
           L.popup()
             .setLatLng(e.latlng)
-            .setContent(`<strong>${escapeHtml(title)}</strong><br>${count} record${count===1?"":"s"} found (current filters).`)
+            .setContent(`<strong>${escapeHtml(title)}</strong><br>${count} record${count===1?"":"s"} match current filters.`)
             .openOn(map);
         });
       }
@@ -1751,15 +2061,16 @@
     stateRecordsEl.innerHTML = "";
 
     const rows = rowsByState.get(stateAbbrev) || [];
-    const filtered = rows.filter(passesCurrentFilters);
 
-    if (filtered.length === 0) {
-      stateRecordsEl.innerHTML = "<p>No state agency data for this state (for current filters).</p>";
+    if (rows.length === 0) {
+      stateRecordsEl.innerHTML = "<p>No state agency data for this state yet.</p>";
       setSidebarOpen(false);
       return;
     }
 
-    filtered.forEach((row, idx) => {
+    rows.forEach((row, idx) => {
+      if (!rowHasAnyContent(row)) return;
+
       const agency =
         escapeHtml(
           row["Law_Enforcement_Agency_Name"] ||
@@ -1774,10 +2085,6 @@
       const kVal  = hasValid(row["K_band"])  ? formatMulti(row["K_band"])  : "";
       const lidar = hasValid(row["Lidar_Guns"]) ? formatMulti(row["Lidar_Guns"]) : "";
 
-      // Speed Cameras (if present in state CSV too)
-      const speedCamerasRaw = getField(row, "SpeedCameras", "Speed Cameras", "Speed_Cameras", "Speed Camera", "SpeedCamera", "Cameras");
-      const speedCameras = hasValid(speedCamerasRaw) ? formatMulti(speedCamerasRaw) : "";
-
       const tactics = hasValid(row["Special_Tactics"]) ? formatNotesWithLinks(row["Special_Tactics"]) : "";
       const notes = hasValid(row["Notes"]) ? formatNotesWithLinks(row["Notes"]) : "";
 
@@ -1791,16 +2098,21 @@
         if (kVal)  bandsHtml += `<div style="margin-top:4px;">- <strong>K:</strong><br>${kVal}</div>`;
       }
 
+      const speedCamsHtml = speedCamerasHtmlFromRow(row);
+
+      const passes = passesCurrentFilters(row);
+
       const div = document.createElement("div");
-      div.className = "record";
+      div.className = "record" + (passes ? "" : " filtered-out");
       div.innerHTML = `
         <div class="record-header">${idx + 1}. ${agency}</div>
         ${bandsHtml}
         ${lidar ? `<div style="margin-top:6px;"><strong>Lidar:</strong><br>${lidar}</div>` : ""}
-        ${speedCameras ? `<div style="margin-top:6px;"><strong>Speed Cameras:</strong><br>${speedCameras}</div>` : ""}
+        ${speedCamsHtml ? `<div style="margin-top:6px;">${speedCamsHtml}</div>` : ""}
         ${flags ? `${flags}` : ""}
         ${tactics ? `<div style="margin-top:6px;"><strong>Special tactics:</strong><br>${tactics}</div>` : ""}
         ${notes ? `<div style="margin-top:6px;"><strong>Notes:</strong><br>${notes}</div>` : ""}
+        ${passes ? "" : `<div class="filtered-tag">Filtered out by current settings</div>`}
       `;
       stateRecordsEl.appendChild(div);
     });
@@ -1866,8 +2178,10 @@
   function setButtonActive(btn, on) { btn.classList.toggle("active", !!on); }
   function setButtonDisabled(btn, on) { btn.classList.toggle("disabled", !!on); btn.disabled = !!on; }
 
-  function renderFilterButtons() {
+  function renderBandFilterButtons() {
     setButtonActive(document.getElementById("stateModeBtn"), stateMode);
+
+    const allOn = bandAllOn();
 
     document.querySelectorAll(".filter-btn[data-filter]").forEach(btn => {
       const f = btn.getAttribute("data-filter");
@@ -1877,8 +2191,9 @@
         setButtonActive(btn, f === "ka");
       } else {
         setButtonDisabled(btn, false);
-        if (f === "all") setButtonActive(btn, allMode);
-        else setButtonActive(btn, allMode || selectedFilters.has(f));
+
+        if (f === "all") setButtonActive(btn, allOn);
+        else setButtonActive(btn, selectedFilters.has(f));
       }
     });
 
@@ -1896,13 +2211,32 @@
     updateKaLabel();
   }
 
+  function renderCamFilterButtons() {
+    const allBtn = document.querySelector('.cam-btn[data-cam="cam_all"]');
+    if (!allBtn) return;
+
+    const allOn = camAllOn();
+    setButtonActive(allBtn, allOn);
+
+    document.querySelectorAll(".cam-btn[data-cam]").forEach(btn => {
+      const f = btn.getAttribute("data-cam");
+      if (f === "cam_all") return;
+      setButtonActive(btn, selectedFilters.has(f));
+      setButtonDisabled(btn, false);
+    });
+  }
+
+  function renderAllFilterButtons() {
+    renderBandFilterButtons();
+    renderCamFilterButtons();
+  }
+
   // =========================
   // SEARCH
   // =========================
   function buildSearchIndex() {
     const items = [];
 
-    // Region rows (US + Canada)
     for (const [key, rows] of rowsByGeoid.entries()) {
       const props = regionPropsByKey.get(key);
       const rName = props ? getRegionDisplayNameFromProps(props) : (key.startsWith("CA-") ? ("Canada " + key) : "Unknown");
@@ -1922,7 +2256,6 @@
       }
     }
 
-    // State agency rows
     for (const [ab, rows] of rowsByState.entries()) {
       const stName = STATE_NAME_MAP[ab] || ab;
       for (const row of rows) {
@@ -2112,10 +2445,11 @@
   function initFilters() {
     document.getElementById("stateModeBtn").addEventListener("click", () => {
       setStateMode(!stateMode);
-      renderFilterButtons();
+      renderAllFilterButtons();
       refreshCanadaStyle();
     });
 
+    // Band filter buttons
     document.querySelectorAll(".filter-btn[data-filter]").forEach(btn => {
       btn.addEventListener("click", async () => {
         if (kaFreqMode) return;
@@ -2123,19 +2457,19 @@
         const f = btn.getAttribute("data-filter");
 
         if (f === "all") {
-          allMode = true;
-          selectedFilters = new Set(FILTERS);
+          // Toggle ALL bands only (does not touch speed cams)
+          const allOn = bandAllOn();
+          if (allOn) {
+            for (const bf of BAND_FILTERS) selectedFilters.delete(bf);
+          } else {
+            for (const bf of BAND_FILTERS) selectedFilters.add(bf);
+          }
         } else {
-          if (allMode) allMode = false;
-
           if (selectedFilters.has(f)) selectedFilters.delete(f);
           else selectedFilters.add(f);
-
-          allMode = (selectedFilters.size === FILTERS.length);
-          if (allMode) selectedFilters = new Set(FILTERS);
         }
 
-        renderFilterButtons();
+        renderAllFilterButtons();
 
         if (!stateMode) {
           await rebuildCountyLayer();
@@ -2148,6 +2482,40 @@
       });
     });
 
+    // Cam filter buttons
+    document.querySelectorAll(".cam-btn[data-cam]").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const f = btn.getAttribute("data-cam");
+
+        if (f === "cam_all") {
+          // Proper toggle behavior:
+          // - if all cams on -> turn all off
+          // - otherwise -> turn all on
+          const allOn = camAllOn();
+          if (allOn) {
+            for (const cf of CAM_FILTERS) selectedFilters.delete(cf);
+          } else {
+            for (const cf of CAM_FILTERS) selectedFilters.add(cf);
+          }
+        } else {
+          if (selectedFilters.has(f)) selectedFilters.delete(f);
+          else selectedFilters.add(f);
+        }
+
+        renderAllFilterButtons();
+
+        if (!stateMode) {
+          await rebuildCountyLayer();
+          if (lastClickedProps) renderRegionInfo(lastClickedProps);
+          refreshCanadaStyle();
+        } else {
+          refreshStatesStyle();
+          if (lastClickedStateAbbrev) renderStateInfo(lastClickedStateAbbrev);
+        }
+      });
+    });
+
+    // Ka freq dropdown
     document.getElementById("kaArrowBtn").addEventListener("click", (e) => {
       e.stopPropagation();
       setKaDropdown(!isKaDropdownOpen());
@@ -2161,22 +2529,18 @@
         if (val === "off") {
           if (kaFreqMode) {
             kaFreqMode = false;
-            allMode = savedAllMode;
             selectedFilters = new Set(savedSelectedFilters);
           }
         } else {
           if (!kaFreqMode) {
-            savedAllMode = allMode;
             savedSelectedFilters = new Set(selectedFilters);
           }
           kaFreqMode = true;
           kaFreqChoice = val;
-          allMode = false;
-          selectedFilters = new Set(["ka"]);
         }
 
         setKaDropdown(false);
-        renderFilterButtons();
+        renderAllFilterButtons();
 
         if (!stateMode) {
           await rebuildCountyLayer();
@@ -2194,7 +2558,7 @@
       if (!wrap.contains(e.target)) setKaDropdown(false);
     });
 
-    renderFilterButtons();
+    renderAllFilterButtons();
   }
 
   // =========================
@@ -2210,7 +2574,6 @@
       if (!usRes.ok) throw new Error("GeoJSON fetch failed (US): " + usRes.status);
       usGeojsonCache = await usRes.json();
 
-      // Load Canada and dissolve divisions -> provinces for thick borders like US states
       setStatus("Loading Canada shapes…");
       try {
         const caRes = await fetch(CANADA_GEOJSON_URL);
@@ -2246,7 +2609,7 @@
       await addStatesLayer();
       indexStatesGeojson();
 
-      // Canada provinces (thick borders)
+      // Canada provinces
       if (canadaProvincesCache) await addCanadaLayer();
 
       setTimeout(() => map.invalidateSize(), 0);
