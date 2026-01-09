@@ -56,18 +56,25 @@
       overflow: visible;
     }
 
+    /* =========================
+       FILTER BUTTON COLOR SYSTEM (muted + matching map)
+       ========================= */
     .filter-btn{
+      --btn-color: #d6d6d6;               /* active fill + border */
+      --btn-tint: rgba(0,0,0,0.06);       /* inactive fill */
+      --btn-on-text: #111;                /* active text */
       display: inline-flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
       min-width: 52px;
       height: 40px;
-      padding: 5px 8px 4px;
+      padding: 6px 10px;
       font-size: 11px;
       border-radius: 10px;
-      border: 1px solid #d6d6d6;
-      background: #f6f6f6;
+      border: 1px solid var(--btn-color);
+      background: var(--btn-tint);
+      color: #111;
       cursor: pointer;
       user-select: none;
       line-height: 1.05;
@@ -75,17 +82,44 @@
     }
 
     .filter-btn .label { font-weight: 700; }
-    .filter-btn .tick {
-      margin-top: 2px;
-      font-size: 12px;
-      line-height: 12px;
-      visibility: hidden;
+
+    .filter-btn.active {
+      background: var(--btn-color);
+      color: var(--btn-on-text);
+      border-color: var(--btn-color);
     }
 
-    .filter-btn.active { background: #222; color: #fff; border-color: #222; }
-    .filter-btn.active .tick { visibility: visible; }
-
     .filter-btn.disabled { opacity: 0.45; cursor: not-allowed; }
+
+    /* Map-matching muted palette */
+    .filter-btn[data-filter="all"]   { --btn-color:#D0D0D0; --btn-tint:rgba(0,0,0,0.06); --btn-on-text:#111; }
+    .filter-btn[data-filter="x"]     { --btn-color:#EAD67A; --btn-tint:rgba(234,214,122,0.18); --btn-on-text:#111; }
+    .filter-btn[data-filter="k"]     { --btn-color:#E7B06A; --btn-tint:rgba(231,176,106,0.18); --btn-on-text:#111; }
+    .filter-btn[data-filter="ka"]    { --btn-color:#7E8BFF; --btn-tint:rgba(126,139,255,0.18); --btn-on-text:#111; }
+    .filter-btn[data-filter="lidar"] { --btn-color:#E57A6F; --btn-tint:rgba(229,122,111,0.18); --btn-on-text:#111; }
+    .filter-btn[data-filter="de"]    { --btn-color:#A57AD9; --btn-tint:rgba(165,122,217,0.18); --btn-on-text:#111; }
+
+    /* State + State Cam List: obvious toggle color (teal, non-conflicting) */
+#stateModeBtn,
+#stateCamRollupBtn{
+  --btn-color:#55C4BE;                 /* active fill */
+  --btn-tint:rgba(85,196,190,0.14);    /* inactive tint */
+  --btn-on-text:#111;                  /* keep text black */
+  border-width: 2px;                   /* makes it pop even when off */
+}
+
+/* Extra "on" emphasis */
+#stateModeBtn.active,
+#stateCamRollupBtn.active{
+  box-shadow: 0 0 0 3px rgba(85,196,190,0.30);
+}
+
+/* Extra "off" emphasis */
+#stateModeBtn:not(.active),
+#stateCamRollupBtn:not(.active){
+  box-shadow: none;
+}
+
 
     /* === Speed cam UI (smaller) === */
     .cam-controls {
@@ -108,13 +142,17 @@
       gap:6px;
       flex-wrap:wrap;
     }
+
     .cam-btn{
+      --btn-color:#d6d6d6;
+      --btn-tint:rgba(0,0,0,0.06);
+      --btn-on-text:#111;
       min-width: 46px;
       height: 30px;
-      padding: 3px 7px 3px;
+      padding: 4px 8px;
       border-radius: 10px;
-      border: 1px solid #d6d6d6;
-      background: #f6f6f6;
+      border: 1px solid var(--btn-color);
+      background: var(--btn-tint);
       cursor: pointer;
       user-select: none;
       font-size: 10.5px;
@@ -123,17 +161,24 @@
       flex-direction:column;
       align-items:center;
       justify-content:center;
+      color:#111;
     }
     .cam-btn .label{ font-weight: 800; }
-    .cam-btn .tick{
-      margin-top: 1px;
-      font-size: 10px;
-      line-height: 10px;
-      visibility:hidden;
+    .cam-btn.active{
+      background: var(--btn-color);
+      color: var(--btn-on-text);
+      border-color: var(--btn-color);
     }
-    .cam-btn.active{ background:#222; color:#fff; border-color:#222; }
-    .cam-btn.active .tick{ visibility:visible; }
     .cam-btn.disabled{ opacity:0.45; cursor:not-allowed; }
+
+    /* Speed cam button palette (muted green for all cam types) */
+    .cam-btn[data-cam="cam_all"]  { --btn-color:#D0D0D0; --btn-tint:rgba(0,0,0,0.06); --btn-on-text:#111; }
+    .cam-btn[data-cam="cam_fmcw"],
+    .cam-btn[data-cam="cam_mrct"],
+    .cam-btn[data-cam="cam_k"],
+    .cam-btn[data-cam="cam_lidar"],
+    .cam-btn[data-cam="cam_gatso"],
+    .cam-btn[data-cam="cam_p2p"]  { --btn-color:#8FD68F; --btn-tint:rgba(143,214,143,0.18); --btn-on-text:#111; }
 
     /* State cam rollup toggle row under cam filters */
     .cam-rollup-row{
@@ -165,15 +210,18 @@
     }
 
     .ka-arrow{
+      --btn-color:#7E8BFF;
+      --btn-tint:rgba(126,139,255,0.18);
+      --btn-on-text:#111;
       display: inline-flex;
       align-items: center;
       justify-content: center;
       width: 30px;
       height: 40px;
       padding: 0;
-      border: 1px solid #d6d6d6;
+      border: 1px solid var(--btn-color);
       border-left: 0;
-      background: #f6f6f6;
+      background: var(--btn-tint);
       border-top-right-radius: 10px;
       border-bottom-right-radius: 10px;
       cursor: pointer;
@@ -181,9 +229,10 @@
       line-height: 1;
       user-select: none;
       flex: 0 0 auto;
+      color:#111;
     }
 
-    .ka-arrow.active { background: #222; color: #fff; border-color: #222; }
+    .ka-arrow.active { background: var(--btn-color); color: var(--btn-on-text); border-color: var(--btn-color); }
     .ka-arrow.disabled { opacity: 0.45; cursor: not-allowed; }
 
     .ka-dropdown{
@@ -211,6 +260,7 @@
       cursor: pointer;
       font-size: 12px;
       line-height: 1.2;
+      color:#111;
     }
     .ka-item:hover { background: #f4f4f4; }
     .ka-item.active { background: #222; color: #fff; }
@@ -371,6 +421,7 @@
       justify-content: center;
       font-size: 18px;
       line-height: 1;
+      color:#111;
     }
 
     #sidebarBackdrop {
@@ -397,6 +448,7 @@
       line-height: 1.2;
       max-width: 260px;
       text-align: left;
+      color:#111;
     }
     #mobileHint.open{ display: block; }
 
@@ -446,14 +498,9 @@
       .filter-btn{
         min-width: 46px;
         height: 36px;
-        padding: 4px 7px 3px;
+        padding: 6px 9px;
         font-size: 10.5px;
         border-radius: 9px;
-      }
-      .filter-btn .tick{
-        font-size: 11px;
-        line-height: 11px;
-        margin-top: 1px;
       }
       .ka-arrow{
         width: 28px;
@@ -473,12 +520,8 @@
         min-width: 44px;
         height: 28px;
         font-size: 10px;
-        padding: 3px 6px 3px;
+        padding: 4px 7px;
         border-radius: 9px;
-      }
-      .cam-btn .tick{
-        font-size: 10px;
-        line-height: 10px;
       }
 
       /* Drawer-style sidebar overlay */
@@ -549,20 +592,20 @@
 
       <div class="filter-row" id="filterBar">
         <button class="filter-btn active" data-filter="all" type="button">
-          <div class="label">All</div><div class="tick">✅</div>
+          <div class="label">All</div>
         </button>
 
         <button class="filter-btn active" data-filter="x" type="button">
-          <div class="label">X</div><div class="tick">✅</div>
+          <div class="label">X</div>
         </button>
 
         <button class="filter-btn active" data-filter="k" type="button">
-          <div class="label">K</div><div class="tick">✅</div>
+          <div class="label">K</div>
         </button>
 
         <div class="ka-split" id="kaSplit">
           <button class="filter-btn active" data-filter="ka" type="button" id="kaMainBtn">
-            <div class="label" id="kaLabel">Ka</div><div class="tick">✅</div>
+            <div class="label" id="kaLabel">Ka</div>
           </button>
 
           <button class="ka-arrow" id="kaArrowBtn" type="button" aria-label="Ka frequency options">▾</button>
@@ -577,17 +620,17 @@
         </div>
 
         <button class="filter-btn active" data-filter="lidar" type="button">
-          <div class="label">Lidar</div><div class="tick">✅</div>
+          <div class="label">Lidar</div>
         </button>
 
         <button class="filter-btn active" data-filter="de" type="button">
-          <div class="label">DE</div><div class="tick">✅</div>
+          <div class="label">DE</div>
         </button>
       </div>
 
       <div class="state-row-centered">
         <button class="filter-btn" id="stateModeBtn" type="button">
-          <div class="label">State</div><div class="tick">✅</div>
+          <div class="label">State</div>
         </button>
 
         <div class="hint" id="modeHint" style="display:none;">
@@ -603,32 +646,32 @@
 
         <div class="cam-row" id="camFilterBar">
           <button class="cam-btn" data-cam="cam_all" type="button">
-            <div class="label">All</div><div class="tick">✅</div>
+            <div class="label">All</div>
           </button>
           <button class="cam-btn" data-cam="cam_fmcw" type="button">
-            <div class="label">FMCW</div><div class="tick">✅</div>
+            <div class="label">FMCW</div>
           </button>
           <button class="cam-btn" data-cam="cam_mrct" type="button">
-            <div class="label">MRCT</div><div class="tick">✅</div>
+            <div class="label">MRCT</div>
           </button>
           <button class="cam-btn" data-cam="cam_k" type="button">
-            <div class="label">K</div><div class="tick">✅</div>
+            <div class="label">K</div>
           </button>
           <button class="cam-btn" data-cam="cam_lidar" type="button">
-            <div class="label">LiDAR</div><div class="tick">✅</div>
+            <div class="label">LiDAR</div>
           </button>
           <button class="cam-btn" data-cam="cam_gatso" type="button">
-            <div class="label">Gatso</div><div class="tick">✅</div>
+            <div class="label">Gatso</div>
           </button>
           <button class="cam-btn" data-cam="cam_p2p" type="button">
-            <div class="label">P2P</div><div class="tick">✅</div>
+            <div class="label">P2P</div>
           </button>
         </div>
 
         <!-- State-mode-only rollup toggle -->
         <div class="cam-rollup-row">
           <button class="filter-btn" id="stateCamRollupBtn" type="button">
-            <div class="label">State Cam List</div><div class="tick">✅</div>
+            <div class="label">State Cam List</div>
           </button>
           <div class="hint" id="stateCamRollupHint">
             State mode only. Turn on to show a combined speed camera list for the whole selected state.
@@ -692,12 +735,22 @@
   // Speed camera filters
   const CAM_FILTERS = ["cam_fmcw", "cam_mrct", "cam_k", "cam_lidar", "cam_gatso", "cam_p2p"];
 
-    function isBandFilter(f) { return BAND_FILTERS.includes(f); }
-    function isCamFilter(f)  { return CAM_FILTERS.includes(f); }
+  function isBandFilter(f) { return BAND_FILTERS.includes(f); }
+  function isCamFilter(f)  { return CAM_FILTERS.includes(f); }
 
   function bandAllOn() { return BAND_FILTERS.every(f => selectedFilters.has(f)); }
   function camAllOn()  { return CAM_FILTERS.every(f => selectedFilters.has(f)); }
   function camAnyOn()  { return CAM_FILTERS.some(f => selectedFilters.has(f)); }
+
+  // Muted palette used by map styling too
+  const COLOR_MAP = {
+    x: "#EAD67A",
+    k: "#E7B06A",
+    ka: "#7E8BFF",
+    lidar: "#E57A6F",
+    de: "#A57AD9",
+    cam: "#8FD68F"
+  };
 
   const STATE_NAME_MAP = {
     AL:"Alabama", AK:"Alaska", AZ:"Arizona", AR:"Arkansas", CA:"California", CO:"Colorado", CT:"Connecticut", DE:"Delaware",
@@ -1730,7 +1783,7 @@
 
     if (kaFreqMode) {
       if (regionMatchesKaFreqSet(geoid, kaFreqChoice)) {
-        s.fillColor = "blue";
+        s.fillColor = COLOR_MAP.ka;
         s.fillOpacity = 0.60;
       }
       return s;
@@ -1752,28 +1805,28 @@
     }
     if (matches.length === 0) return s;
 
-        // ✅ If the matches are ONLY speed cameras (one or many), force brown.
-        const hasBandMatch = matches.some(isBandFilter);
-        const hasCamMatch  = matches.some(isCamFilter);
-        if (hasCamMatch && !hasBandMatch) {
-          s.fillColor = "#00FF00";
-          s.fillOpacity = 0.55;
-          return s;
-        }
+    // If matches are ONLY speed cameras, force cam color (muted green)
+    const hasBandMatch = matches.some(isBandFilter);
+    const hasCamMatch  = matches.some(isCamFilter);
+    if (hasCamMatch && !hasBandMatch) {
+      s.fillColor = COLOR_MAP.cam;
+      s.fillOpacity = 0.55;
+      return s;
+    }
 
     const colorMap = {
-      x:"gold",
-      k:"orange",
-      ka:"blue",
-      lidar:"red",
-      de:"purple",
+      x: COLOR_MAP.x,
+      k: COLOR_MAP.k,
+      ka: COLOR_MAP.ka,
+      lidar: COLOR_MAP.lidar,
+      de: COLOR_MAP.de,
 
-      cam_fmcw:"#00FF00",
-      cam_mrct:"#00FF00",
-      cam_k:"#00FF00",
-      cam_lidar:"#00FF00",
-      cam_gatso:"#00FF00",
-      cam_p2p:"#00FF00"
+      cam_fmcw: COLOR_MAP.cam,
+      cam_mrct: COLOR_MAP.cam,
+      cam_k: COLOR_MAP.cam,
+      cam_lidar: COLOR_MAP.cam,
+      cam_gatso: COLOR_MAP.cam,
+      cam_p2p: COLOR_MAP.cam
     };
 
     if (matches.length === 1) {
@@ -1810,7 +1863,7 @@
 
     if (kaFreqMode) {
       if (regionMatchesKaFreqSet(key, kaFreqChoice)) {
-        s.fillColor = "blue";
+        s.fillColor = COLOR_MAP.ka;
         s.fillOpacity = 0.35;
       } else {
         s.fillOpacity = 0.0;
@@ -1840,29 +1893,28 @@
       return s;
     }
 
-        // ✅ Cam-only selection stays brown even if multiple cam types match
-        const hasBandMatch = matches.some(isBandFilter);
-        const hasCamMatch  = matches.some(isCamFilter);
-        if (hasCamMatch && !hasBandMatch) {
-          s.fillColor = "#00FF00";
-          s.fillOpacity = 0.35;
-          return s;
-        }
+    // Cam-only selection stays cam color even if multiple cam types match
+    const hasBandMatch = matches.some(isBandFilter);
+    const hasCamMatch  = matches.some(isCamFilter);
+    if (hasCamMatch && !hasBandMatch) {
+      s.fillColor = COLOR_MAP.cam;
+      s.fillOpacity = 0.35;
+      return s;
+    }
 
     const colorMap = {
-      x:"gold",
-      k:"orange",
-      ka:"blue",
-      lidar:"red",
-      de:"purple",
+      x: COLOR_MAP.x,
+      k: COLOR_MAP.k,
+      ka: COLOR_MAP.ka,
+      lidar: COLOR_MAP.lidar,
+      de: COLOR_MAP.de,
 
-      // ✅ all speed cams same color (brown)
-      cam_fmcw:"#00FF00",
-      cam_mrct:"#00FF00",
-      cam_k:"#00FF00",
-      cam_lidar:"#00FF00",
-      cam_gatso:"#00FF00",
-      cam_p2p:"#00FF00"
+      cam_fmcw: COLOR_MAP.cam,
+      cam_mrct: COLOR_MAP.cam,
+      cam_k: COLOR_MAP.cam,
+      cam_lidar: COLOR_MAP.cam,
+      cam_gatso: COLOR_MAP.cam,
+      cam_p2p: COLOR_MAP.cam
     };
 
     if (matches.length === 1) {
@@ -1902,7 +1954,7 @@
 
     if (kaFreqMode) {
       if (stateMatchesKaFreqSet(ab, kaFreqChoice)) {
-        s.fillColor = "blue";
+        s.fillColor = COLOR_MAP.ka;
         s.fillOpacity = 0.35;
       } else {
         s.fillOpacity = 0.0;
@@ -1932,29 +1984,28 @@
       return s;
     }
 
-        // ✅ Cam-only selection stays brown even if multiple cam types match
-        const hasBandMatch = matches.some(isBandFilter);
-        const hasCamMatch  = matches.some(isCamFilter);
-        if (hasCamMatch && !hasBandMatch) {
-          s.fillColor = "#00FF00";
-          s.fillOpacity = 0.35;
-          return s;
-        }
+    // Cam-only selection stays cam color even if multiple cam types match
+    const hasBandMatch = matches.some(isBandFilter);
+    const hasCamMatch  = matches.some(isCamFilter);
+    if (hasCamMatch && !hasBandMatch) {
+      s.fillColor = COLOR_MAP.cam;
+      s.fillOpacity = 0.35;
+      return s;
+    }
 
     const colorMap = {
-      x:"gold",
-      k:"orange",
-      ka:"blue",
-      lidar:"red",
-      de:"purple",
+      x: COLOR_MAP.x,
+      k: COLOR_MAP.k,
+      ka: COLOR_MAP.ka,
+      lidar: COLOR_MAP.lidar,
+      de: COLOR_MAP.de,
 
-      // ✅ all speed cams same color (brown)
-      cam_fmcw:"#00FF00",
-      cam_mrct:"#00FF00",
-      cam_k:"#00FF00",
-      cam_lidar:"#00FF00",
-      cam_gatso:"#00FF00",
-      cam_p2p:"#00FF00"
+      cam_fmcw: COLOR_MAP.cam,
+      cam_mrct: COLOR_MAP.cam,
+      cam_k: COLOR_MAP.cam,
+      cam_lidar: COLOR_MAP.cam,
+      cam_gatso: COLOR_MAP.cam,
+      cam_p2p: COLOR_MAP.cam
     };
 
     if (matches.length === 1) {
@@ -2187,7 +2238,7 @@
     stateNameEl.textContent = `${fullName} (${stateAbbrev})`;
     stateRecordsEl.innerHTML = "";
 
-    // ✅ If State Cam List is ON: show ONLY speed cams (no agencies)
+    // If State Cam List is ON: show ONLY speed cams (no agencies)
     if (stateCamRollup) {
       stateTitleEl.textContent = "Speed Cameras";
 
