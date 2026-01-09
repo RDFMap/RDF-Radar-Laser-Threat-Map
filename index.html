@@ -93,11 +93,11 @@
 
     /* Map-matching muted palette */
     .filter-btn[data-filter="all"]   { --btn-color:#D0D0D0; --btn-tint:rgba(0,0,0,0.06); --btn-on-text:#111; }
-    .filter-btn[data-filter="x"]     { --btn-color:#EAD67A; --btn-tint:rgba(234,214,122,0.18); --btn-on-text:#111; }
-    .filter-btn[data-filter="k"]     { --btn-color:#E7B06A; --btn-tint:rgba(231,176,106,0.18); --btn-on-text:#111; }
-    .filter-btn[data-filter="ka"]    { --btn-color:#7E8BFF; --btn-tint:rgba(126,139,255,0.18); --btn-on-text:#111; }
-    .filter-btn[data-filter="lidar"] { --btn-color:#E57A6F; --btn-tint:rgba(229,122,111,0.18); --btn-on-text:#111; }
-    .filter-btn[data-filter="de"]    { --btn-color:#A57AD9; --btn-tint:rgba(165,122,217,0.18); --btn-on-text:#111; }
+    .filter-btn[data-filter="x"]     { --btn-color:gold; --btn-tint:rgba(234,214,122,0.18); --btn-on-text:#111; }
+    .filter-btn[data-filter="k"]     { --btn-color:orange; --btn-tint:rgba(231,176,106,0.18); --btn-on-text:#111; }
+    .filter-btn[data-filter="ka"]    { --btn-color:blue; --btn-tint:rgba(126,139,255,0.18); --btn-on-text:#111; }
+    .filter-btn[data-filter="lidar"] { --btn-color:red; --btn-tint:rgba(229,122,111,0.18); --btn-on-text:#111; }
+    .filter-btn[data-filter="de"]    { --btn-color:purple; --btn-tint:rgba(165,122,217,0.18); --btn-on-text:#111; }
 
     /* State + State Cam List: obvious toggle color (teal, non-conflicting) */
 #stateModeBtn,
@@ -210,7 +210,7 @@
     }
 
     .ka-arrow{
-      --btn-color:#7E8BFF;
+      --btn-color:blue;
       --btn-tint:rgba(126,139,255,0.18);
       --btn-on-text:#111;
       display: inline-flex;
@@ -744,11 +744,11 @@
 
   // Muted palette used by map styling too
   const COLOR_MAP = {
-    x: "#EAD67A",
-    k: "#E7B06A",
-    ka: "#7E8BFF",
-    lidar: "#E57A6F",
-    de: "#A57AD9",
+    x: "gold",
+    k: "orange",
+    ka: "blue",
+    lidar: "red",
+    de: "purple",
     cam: "#65FE08"
   };
 
