@@ -1,0 +1,2230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>RDF Route Planner</title>
+
+    <link rel="icon" href="./favicon.ico">
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg">
+    <link rel="icon" type="image/png" href="./favicon.png">
+    <link rel="apple-touch-icon" href="./favicon.png">
+
+    <link
+            rel="stylesheet"
+            href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+            integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+            crossorigin=""
+    />
+
+    <script data-goatcounter="https://rdfmap.goatcounter.com/count"
+            async src="https://gc.zgo.at/count.js"></script>
+
+    <style>
+        html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+        #app { display: flex; height: 100vh; width: 100vw; }
+        #map { flex: 2; min-width: 0; }
+
+        /* Sidebar */
+        #sidebar {
+          flex: 1;
+          max-width: 460px;
+          border-left: 1px solid #e6e6e6;
+          padding: 14px 14px 28px; /* extra bottom padding fixes last-item scroll */
+          box-sizing: border-box;
+          overflow-y: auto;
+          background: #fafafa;
+        }
+
+        .panel {
+          background: #fff;
+          border: 1px solid #eee;
+          border-radius: 12px;
+          padding: 12px 12px;
+          margin-bottom: 12px;
+          box-shadow: 0 1px 0 rgba(0,0,0,0.03);
+          overflow: visible;
+        }
+
+        #sidebar h1 { font-size: 20px; margin: 0 0 6px; }
+        #status { font-size: 13px; color: #666; margin-top: 2px; }
+
+        h2 { font-size: 15px; margin: 0 0 10px; }
+
+        /* Header row */
+        .header-row{
+          display:flex;
+          align-items:flex-start;
+          justify-content:space-between;
+          gap: 12px;
+        }
+        .header-left{ min-width: 0; }
+        .header-links{
+          display:flex;
+          flex-direction:column;
+          align-items:flex-end;
+          gap: 6px;
+          text-align:right;
+          min-width: 140px;
+          max-width: 180px;
+        }
+        .header-links a{
+          font-size: 11px;
+          font-weight: 600;
+          line-height: 1.15;
+          text-decoration: underline;
+          white-space: nowrap;
+        }
+
+        /* Mobile drawer */
+        #sidebarToggle {
+          position: fixed;
+          top: 12px;
+          right: 12px;
+          z-index: 1200;
+          display: none;
+          height: 42px;
+          width: 42px;
+          border-radius: 12px;
+          border: 1px solid #d6d6d6;
+          background: rgba(255,255,255,0.95);
+          box-shadow: 0 10px 22px rgba(0,0,0,0.12);
+          cursor: pointer;
+          user-select: none;
+          align-items: center;
+          justify-content: center;
+          font-size: 18px;
+          line-height: 1;
+          color:#111;
+        }
+        #sidebarBackdrop {
+          position: fixed;
+          inset: 0;
+          background: rgba(0,0,0,0.35);
+          z-index: 1100;
+          display: none;
+        }
+        #sidebarBackdrop.open { display: block; }
+
+        @media (max-width: 900px) {
+          #app { display: block; }
+          #map { height: 100vh; width: 100vw; }
+          #sidebarToggle { display: inline-flex; }
+
+          #sidebar {
+            position: fixed;
+            top: 0;
+            right: 0;
+            height: 100vh;
+            width: min(460px, 92vw);
+            max-width: 92vw;
+            z-index: 1150;
+            border-left: none;
+            box-shadow: 0 18px 38px rgba(0,0,0,0.18);
+            transform: translateX(105%);
+            transition: transform 180ms ease;
+          }
+          #sidebar.open { transform: translateX(0); }
+          body.no-scroll { overflow: hidden; }
+
+          .header-row{ flex-direction:column; align-items:flex-start; }
+          .header-links{ align-items:flex-start; text-align:left; }
+        }
+
+        /* Inputs + autocomplete */
+        .route-grid{ display:flex; gap:8px; align-items:center; }
+        .input-wrap{
+          position: relative;
+          flex: 1;
+          min-width: 0;
+        }
+        .search-input{
+          width: 100%;
+          padding: 9px 10px;
+          border-radius: 10px;
+          border: 1px solid #e1e1e1;
+          font-size: 13px;
+          outline: none;
+          background: #fff;
+          box-sizing: border-box;
+        }
+
+        .suggestions{
+          position: absolute;
+          left: 0;
+          right: 0;
+          top: calc(100% + 6px);
+          background: #fff;
+          border: 1px solid #e6e6e6;
+          border-radius: 12px;
+          box-shadow: 0 12px 28px rgba(0,0,0,0.14);
+          z-index: 10050;
+          overflow: hidden;
+          display: none;
+          max-height: 260px;
+          overflow-y: auto;
+        }
+        .suggestions.open{ display:block; }
+
+        .s-item{
+          padding: 10px 10px;
+          cursor: pointer;
+          border-bottom: 1px solid #f0f0f0;
+          font-size: 12.5px;
+          line-height: 1.2;
+          color:#111;
+        }
+        .s-item:last-child{ border-bottom:none; }
+        .s-item:hover{ background:#f6f6f6; }
+        .s-top{ font-weight: 800; font-size: 12.5px; }
+        .s-sub{ color:#666; font-size: 11.5px; margin-top: 2px; }
+
+        /* Buttons (route actions) */
+        .btn{
+          --btn-color:#D0D0D0;
+          --btn-tint:rgba(0,0,0,0.06);
+          --btn-on-text:#111;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          height: 38px;
+          padding: 0 12px;
+          border-radius: 10px;
+          border: 1px solid var(--btn-color);
+          background: var(--btn-tint);
+          color: #111;
+          cursor: pointer;
+          user-select: none;
+          font-size: 12px;
+          font-weight: 900;
+          line-height: 1;
+          white-space: nowrap;
+        }
+        .btn:hover{ background: rgba(0,0,0,0.08); }
+
+        .btn.teal{
+          --btn-color:#55C4BE;
+          --btn-tint:rgba(85,196,190,0.14);
+          border-width: 2px;
+        }
+
+        .route-actions{
+          display:flex;
+          gap:8px;
+          flex-wrap:wrap;
+          margin-top:10px;
+        }
+
+        /* Route results cards */
+        .route-state-card{
+          border: 1px solid #eee;
+          border-radius: 12px;
+          background:#fff;
+          padding: 10px;
+          margin-bottom: 10px;
+          overflow: visible; /* IMPORTANT: fixes bottom expand scroll clipping */
+        }
+
+        .route-state-head{
+          display:grid;
+          grid-template-columns: minmax(0,1fr) auto;
+          gap: 10px;
+          align-items:start;
+        }
+
+        .route-state-left{
+          min-width: 0;
+        }
+
+        .route-state-title{
+          font-weight: 950;
+          font-size: 14px;
+          line-height: 1.15;
+          white-space: normal;
+          word-break: normal;
+          overflow-wrap: break-word;
+        }
+        .route-state-sub{
+          font-size: 12px;
+          color:#666;
+          margin-top: 3px;
+          line-height: 1.25;
+          white-space: normal;
+          word-break: normal;
+          overflow-wrap: break-word;
+        }
+
+        .expand-btn{
+          height: 30px;
+          padding: 0 10px;
+          border-radius: 999px;
+          font-size: 11px;
+          font-weight: 900;
+        }
+
+        /* Combined threats block (full width, line-per-category, no +) */
+        .rollup{
+          margin-top: 10px;
+          border-top: 1px solid #eee;
+          padding-top: 10px;
+        }
+        .rollup-title{
+          font-size: 12px;
+          font-weight: 950;
+          margin-bottom: 6px;
+        }
+        .rollup-line{
+          font-size: 12px;
+          color:#111;
+          line-height: 1.25;
+          margin-top: 4px;
+          white-space: normal;
+          word-break: normal;
+          overflow-wrap: break-word;
+        }
+        .rollup-line strong{ font-weight: 950; }
+        .rollup-empty{ color:#666; }
+
+        .route-state-body{
+          margin-top: 10px;
+          display:none;
+        }
+        .route-state-body.open{ display:block; }
+
+        /* County card */
+        .record {
+          border: 1px solid #eee;
+          border-radius: 12px;
+          padding: 10px;
+          margin-bottom: 10px;
+          background: #fff;
+        }
+
+        .route-county-row{
+          display:grid;
+          grid-template-columns: minmax(0,1fr) auto;
+          gap: 10px;
+          align-items:start;
+        }
+
+        .route-county-title{
+          font-weight: 950;
+          font-size: 13px;
+          line-height: 1.2;
+          white-space: normal;
+          word-break: normal;
+          overflow-wrap: break-word;
+        }
+        .route-county-sub{
+          font-size: 12px;
+          color:#666;
+          margin-top: 2px;
+          line-height: 1.2;
+          white-space: normal;
+          word-break: normal;
+          overflow-wrap: break-word;
+        }
+
+        .pillrow{
+          display:flex;
+          gap:6px;
+          flex-wrap:wrap;
+          align-items:center;
+          margin-top: 8px;
+        }
+
+        .pill{
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          height: 24px;
+          padding: 0 8px;
+          border-radius: 999px;
+          border: 1px solid rgba(0,0,0,0.12);
+          background: rgba(0,0,0,0.06);
+          font-size: 11px;
+          font-weight: 950;
+          color:#111;
+          line-height: 1;
+          white-space: nowrap;
+        }
+        .pill.x     { border-color: gold;   background: rgba(234,214,122,0.20); }
+        .pill.k     { border-color: orange; background: rgba(231,176,106,0.20); }
+        .pill.ka    { border-color: #2D68C4; background: rgba(126,139,255,0.20); }
+        .pill.lidar { border-color: red;    background: rgba(229,122,111,0.20); }
+        .pill.de    { border-color: purple; background: rgba(165,122,217,0.20); }
+        .pill.cams  { border-color: #65FE08; background: rgba(143,214,143,0.20); }
+        .pill.multi { border-color: #55C4BE; background: rgba(85,196,190,0.16); }
+
+        .actions-col{
+          display:flex;
+          flex-direction:column;
+          gap:8px;
+          align-items:flex-end;
+        }
+
+        .focus-btn{
+          height: 28px;
+          border-radius: 10px;
+          font-size: 11px;
+          font-weight: 950;
+          padding: 0 10px;
+        }
+
+        .route-county-expand{
+          margin-top: 10px;
+          display:none;
+        }
+        .route-county-expand.open{ display:block; }
+
+        /* Notes/special tactics */
+        .notes-block { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
+        .note-line { line-height: 1.25; overflow-wrap: anywhere; word-break: break-word; }
+        .note-link { display: inline-flex; align-items: center; gap: 6px; text-decoration: underline; font-weight: 650; overflow-wrap: anywhere; word-break: break-word; }
+        .note-domain { font-size: 12px; color: #666; font-weight: 500; }
+        .flagline { margin-top: 6px; }
+        .flagline div { margin-top: 3px; }
+
+        /* Player icon */
+        .player-icon{
+          width: 22px;
+          height: 22px;
+          border-radius: 50%;
+          background: rgba(85,196,190,0.22);
+          border: 2px solid #55C4BE;
+          position: relative;
+          box-shadow: 0 8px 16px rgba(0,0,0,0.10);
+        }
+        .player-icon::after{
+          content:"";
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          background: #111;
+          position: absolute;
+          left: 50%;
+          top: 50%;
+          transform: translate(-50%,-50%);
+        }
+    </style>
+</head>
+
+<body>
+<button id="sidebarToggle" type="button" aria-label="Open sidebar" aria-expanded="false">☰</button>
+<div id="sidebarBackdrop" aria-hidden="true"></div>
+
+<div id="app">
+    <div id="map"></div>
+
+    <div id="sidebar">
+        <div class="panel">
+            <div class="header-row">
+                <div class="header-left">
+                    <h1>RDF Route Planner</h1>
+                    <div id="status">Loading…</div>
+                </div>
+
+                <div class="header-links">
+                    <a href="https://www.rdforum.org/threads/150468/" target="_blank" rel="noopener noreferrer">
+                        RDForum Thread & Updates
+                    </a>
+                    <a href="https://forms.fillout.com/t/dsffrfAc4jus" target="_blank" rel="noopener noreferrer">
+                        Have Data? Submit here
+                    </a>
+                    <a href="./index.html" target="_self" rel="noopener">
+                        Threat Map
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel" id="routePlannerPanel">
+            <h2>Route</h2>
+
+            <div class="route-grid">
+                <div class="input-wrap">
+                    <input id="fromInput" class="search-input" placeholder="From (address or place)…" autocomplete="off" />
+                    <div id="fromSug" class="suggestions" aria-label="From suggestions"></div>
+                </div>
+                <button id="locateBtn" class="btn teal" type="button" title="Use your current location">
+                    ⌖ Locate
+                </button>
+            </div>
+
+            <div style="height:8px;"></div>
+
+            <div class="route-grid">
+                <div class="input-wrap">
+                    <input id="toInput" class="search-input" placeholder="To (address or place)…" autocomplete="off" />
+                    <div id="toSug" class="suggestions" aria-label="To suggestions"></div>
+                </div>
+                <button id="swapBtn" class="btn" type="button" title="Swap from/to">
+                    ⇄ Swap
+                </button>
+            </div>
+
+            <div class="route-actions">
+                <button class="btn" id="routeBuildBtn" type="button">Build</button>
+                <button class="btn" id="routeClearBtn" type="button">Clear</button>
+            </div>
+
+            <div id="routeStatus" style="margin-top:10px; font-size:12.5px; color:#444; line-height:1.25;">
+                Type From/To (use suggestions), then Build. Locate sets From automatically.
+            </div>
+
+            <div id="routeResults" style="margin-top:10px; display:none;"></div>
+        </div>
+    </div>
+</div>
+
+<script
+        src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+        crossorigin=""
+></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="https://unpkg.com/leaflet.vectorgrid@1.3.0/dist/Leaflet.VectorGrid.bundled.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/polygon-clipping@0.15.7/dist/polygon-clipping.umd.js"></script>
+
+<script>
+    // =========================
+    // CONFIG
+    // =========================
+    const COUNTY_CSV_URL =
+      "https://docs.google.com/spreadsheets/d/e/2PACX-1vR4ZdepcnMW0OCvCvgRTWPFGSuaQ6u75caFu8zF_Sh-VY525EwU81XzaiJhnvQTCcfHndclCHAQv9DT/pub?gid=2097640781&single=true&output=csv";
+
+    const STATE_AGENCY_CSV_URL =
+      "https://docs.google.com/spreadsheets/d/e/2PACX-1vR4ZdepcnMW0OCvCvgRTWPFGSuaQ6u75caFu8zF_Sh-VY525EwU81XzaiJhnvQTCcfHndclCHAQv9DT/pub?gid=507352241&single=true&output=csv";
+
+    const GEOJSON_URL = "./allCounties.json";
+    const CANADA_GEOJSON_URL = "./Canada.json";
+
+    const DEFAULT_CENTER = [39.5, -98.35];
+    const DEFAULT_ZOOM = 4;
+
+    // Routing
+    const OSRM_ROUTE_URL = "https://router.project-osrm.org/route/v1/driving/";
+    const ROUTE_SAMPLE_STEP_METERS = 1200;
+
+    // Nominatim (OSM) autocomplete + geocode
+    const NOMINATIM_SEARCH = "https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=6&q=";
+    const NOMINATIM_REVERSE = "https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&addressdetails=1&lat=";
+
+    // Map colors (no filters here — just “what exists”)
+    const COLOR = {
+      x: "gold",
+      k: "orange",
+      ka: "#2D68C4",
+      lidar: "red",
+      de: "purple",
+      cams: "#65FE08",
+      multi: "#55C4BE"
+    };
+
+    const STATE_NAME_MAP = {
+      AL:"Alabama", AK:"Alaska", AZ:"Arizona", AR:"Arkansas", CA:"California", CO:"Colorado", CT:"Connecticut", DE:"Delaware",
+      FL:"Florida", GA:"Georgia", HI:"Hawaii", ID:"Idaho", IL:"Illinois", IN:"Indiana", IA:"Iowa", KS:"Kansas", KY:"Kentucky",
+      LA:"Louisiana", ME:"Maine", MD:"Maryland", MA:"Massachusetts", MI:"Michigan", MN:"Minnesota", MS:"Mississippi",
+      MO:"Missouri", MT:"Montana", NE:"Nebraska", NV:"Nevada", NH:"New Hampshire", NJ:"New Jersey", NM:"New Mexico",
+      NY:"New York", NC:"North Carolina", ND:"North Dakota", OH:"Ohio", OK:"Oklahoma", OR:"Oregon", PA:"Pennsylvania",
+      RI:"Rhode Island", SC:"South Carolina", SD:"South Dakota", TN:"Tennessee", TX:"Texas", UT:"Utah", VT:"Vermont",
+      VA:"Virginia", WA:"Washington", WV:"West Virginia", WI:"Wisconsin", WY:"Wyoming", DC:"District of Columbia"
+    };
+
+    // Canada PRUID codes -> province
+    const CA_PROV_INFO = {
+      "10": { abbr:"NL", name:"Newfoundland and Labrador" },
+      "11": { abbr:"PE", name:"Prince Edward Island" },
+      "12": { abbr:"NS", name:"Nova Scotia" },
+      "13": { abbr:"NB", name:"New Brunswick" },
+      "24": { abbr:"QC", name:"Quebec" },
+      "35": { abbr:"ON", name:"Ontario" },
+      "46": { abbr:"MB", name:"Manitoba" },
+      "47": { abbr:"SK", name:"Saskatchewan" },
+      "48": { abbr:"AB", name:"Alberta" },
+      "59": { abbr:"BC", name:"British Columbia" },
+      "60": { abbr:"YT", name:"Yukon" },
+      "61": { abbr:"NT", name:"Northwest Territories" },
+      "62": { abbr:"NU", name:"Nunavut" }
+    };
+
+    // =========================
+    // UTIL
+    // =========================
+    const MOBILE_BREAKPOINT = 900;
+    const sidebarEl = document.getElementById("sidebar");
+    const sidebarToggleBtn = document.getElementById("sidebarToggle");
+    const sidebarBackdropEl = document.getElementById("sidebarBackdrop");
+
+    function isMobileLayout() {
+      return window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT}px)`).matches;
+    }
+    function setSidebarOpen(open) {
+      if (!isMobileLayout()) {
+        sidebarEl.classList.remove("open");
+        sidebarBackdropEl.classList.remove("open");
+        document.body.classList.remove("no-scroll");
+        sidebarToggleBtn.setAttribute("aria-expanded", "false");
+        return;
+      }
+      sidebarEl.classList.toggle("open", !!open);
+      sidebarBackdropEl.classList.toggle("open", !!open);
+      document.body.classList.toggle("no-scroll", !!open);
+      sidebarToggleBtn.setAttribute("aria-expanded", open ? "true" : "false");
+      if (map) setTimeout(() => map.invalidateSize(), 0);
+    }
+    sidebarToggleBtn.addEventListener("click", () => {
+      const open = sidebarEl.classList.contains("open");
+      setSidebarOpen(!open);
+    });
+    sidebarBackdropEl.addEventListener("click", () => setSidebarOpen(false));
+    window.addEventListener("resize", () => setSidebarOpen(false));
+
+    function setStatus(msg) { document.getElementById("status").textContent = msg; }
+    function setRouteStatus(msg) { document.getElementById("routeStatus").textContent = msg; }
+
+    function hasValid(v) {
+      if (v === undefined || v === null) return false;
+      const t = String(v).trim();
+      if (!t) return false;
+      return t.toLowerCase() !== "n/a";
+    }
+
+    function escapeHtml(s) {
+      return String(s ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    function escapeAttr(s) {
+      return String(s ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/"/g, "&quot;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    }
+
+    function normalizeBreaksToNewlines(s) {
+      if (!hasValid(s)) return "";
+      let t = String(s);
+      t = t.replace(/&lt;\s*br\s*\/?\s*&gt;/gi, "\n");
+      t = t.replace(/<\s*br\s*\/?\s*>/gi, "\n");
+      t = t.replace(/\\n/g, "\n");
+      return t;
+    }
+
+    function formatMulti(value) {
+      if (!hasValid(value)) return "";
+      const raw = normalizeBreaksToNewlines(value);
+      return raw
+        .split(/;|\n/)
+        .map(s => s.trim())
+        .filter(Boolean)
+        .map(s => escapeHtml(s))
+        .join("<br>");
+    }
+
+    function isYes(v) {
+      if (v === undefined || v === null) return false;
+      return String(v).trim().toLowerCase() === "y";
+    }
+
+    function containsDE(val) {
+      if (!hasValid(val)) return false;
+      const s = String(val);
+      return (/\bDE[A-Z0-9_-]*\b/i.test(s) || /\bdragon\s*eye\b/i.test(s));
+    }
+
+    function getField(row, ...keys) {
+      for (const k of keys) {
+        if (!k) continue;
+        if (row[k] !== undefined) return row[k];
+        const target = String(k).trim().toLowerCase().replace(/\s+/g, " ");
+        for (const rk of Object.keys(row)) {
+          const norm = String(rk).trim().toLowerCase().replace(/\s+/g, " ");
+          if (norm === target) return row[rk];
+        }
+      }
+      return "";
+    }
+
+    // Notes links formatting
+    function normalizeUrl_(raw) {
+      let u = String(raw || "").trim();
+      if (!u) return "";
+      if (/^www\./i.test(u)) u = "https://" + u;
+      u = u.replace(/[)\],.]+$/g, "");
+      try {
+        const parsed = new URL(u);
+        if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return "";
+        return parsed.href;
+      } catch { return ""; }
+    }
+    function hostFromUrl_(u) {
+      try { return new URL(u).hostname.replace(/^www\./i, ""); }
+      catch { return ""; }
+    }
+    function parseLinkLine_(line) {
+      const s = String(line || "").trim();
+      if (!s) return null;
+
+      let m = s.match(/^(.+?)\s*\|\s*(\S+)\s*$/);
+      if (m) {
+        const url = normalizeUrl_(m[2]);
+        if (!url) return null;
+        return { label: m[1].trim(), url };
+      }
+
+      m = s.match(/^\[([^\]]+?)\]\(([^)]+)\)\s*$/);
+      if (m) {
+        const url = normalizeUrl_(m[2]);
+        if (!url) return null;
+        return { label: m[1].trim(), url };
+      }
+
+      m = s.match(/^(\S+)$/);
+      if (m) {
+        const url = normalizeUrl_(m[1]);
+        if (!url) return null;
+        return { label: hostFromUrl_(url) || "Link", url };
+      }
+
+      m = s.match(/^(.*?)(https?:\/\/\S+|www\.\S+)\s*$/i);
+      if (m) {
+        const url = normalizeUrl_(m[2]);
+        if (!url) return null;
+        const label = (m[1] || "").trim().replace(/[-–—:|]+$/g, "").trim();
+        return { label: label || (hostFromUrl_(url) || "Link"), url };
+      }
+
+      return null;
+    }
+    function formatNotesWithLinks(value) {
+      if (!hasValid(value)) return "";
+      const raw = normalizeBreaksToNewlines(value);
+      const parts = raw.split(/;|\n/).map(s => s.trim()).filter(Boolean);
+      if (!parts.length) return "";
+
+      const linesHtml = parts.map(p => {
+        const link = parseLinkLine_(p);
+        if (link) {
+          const host = hostFromUrl_(link.url);
+          return `
+            <div class="note-line">
+              <a class="note-link" href="${escapeAttr(link.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(link.label)}</a>
+              ${host ? `<span class="note-domain">(${escapeHtml(host)})</span>` : ""}
+            </div>
+          `;
+        }
+        return `<div class="note-line">${escapeHtml(p)}</div>`;
+      });
+
+      return `<div class="notes-block">${linesHtml.join("")}</div>`;
+    }
+
+    function flagsHtmlFromRow(row) {
+      const overpass = isYes(getField(row, "Overpass_shots", "Overpass shots", "Overpass"));
+      const rear     = isYes(getField(row, "Rear_shots", "Rear shots", "Rear"));
+      const ghost    = isYes(getField(row, "Ghost or Unmarked Unit", "Ghost/Unmarked", "Ghost", "Unmarked Unit"));
+
+      const lines = [];
+      if (overpass) lines.push(`Overpass Shots: ✅`);
+      if (rear)     lines.push(`Rear Shots: ✅`);
+      if (ghost)    lines.push(`Ghost/Unmarked: ✅`);
+      if (!lines.length) return "";
+      return `<div class="flagline">${lines.map(l => `<div>${escapeHtml(l)}</div>`).join("")}</div>`;
+    }
+
+    function rowHasAnyContent(row) {
+      const core =
+        hasValid(row["K_band"]) ||
+        hasValid(row["Ka_band"]) ||
+        hasValid(row["Lidar_Guns"]) ||
+        hasValid(row["X_band"]) ||
+        hasValid(getField(row, "SpeedCameras", "Speed Cameras", "Speed_Cameras", "Speed Camera", "SpeedCamera", "Cameras"));
+      if (core) return true;
+
+      if (hasValid(row["Special_Tactics"])) return true;
+      if (isYes(getField(row, "Overpass_shots", "Overpass shots", "Overpass"))) return true;
+      if (isYes(getField(row, "Rear_shots", "Rear shots", "Rear"))) return true;
+      if (isYes(getField(row, "Ghost or Unmarked Unit", "Ghost/Unmarked", "Ghost", "Unmarked Unit"))) return true;
+      return false;
+    }
+
+    // =========================
+    // GEOID NORMALIZATION
+    // =========================
+    function normalizeUsGeoid(v) {
+      let t = String(v ?? "").trim();
+      if (!t) return "";
+      if (/^\d{5}$/.test(t)) return t;
+      if (/^\d+(\.\d+)?$/.test(t)) {
+        const n = Math.floor(Number(t));
+        if (Number.isFinite(n)) {
+          const s = String(n).padStart(5, "0");
+          if (/^\d{5}$/.test(s)) return s;
+        }
+      }
+      const digits = t.replace(/\D/g, "");
+      if (digits.length === 5) return digits;
+      if (digits.length === 6 && digits.endsWith("0")) {
+        const maybe = digits.slice(0, 5);
+        if (/^\d{5}$/.test(maybe)) return maybe;
+      }
+      return "";
+    }
+
+    function normalizeCanadaPruid2(v) {
+      const raw = String(v ?? "").trim();
+      if (!raw) return "";
+      if (/^\d{1,2}$/.test(raw)) return raw.padStart(2, "0");
+      const digits = raw.replace(/\D/g, "");
+      if (/^\d{1,2}$/.test(digits) && digits.length === raw.replace(/\s/g,"").length) {
+        return digits.padStart(2,"0");
+      }
+      return "";
+    }
+
+    function isCanadaProps(p) {
+      if (!p) return false;
+      if (String(p.COUNTRY || "").toUpperCase() === "CANADA") return true;
+      if (p.PRUID !== undefined && p.PRUID !== null) return true;
+      if (String(p.GEOID || "").toUpperCase().startsWith("CA-")) return true;
+      return false;
+    }
+
+    function regionKeyFromProps(p) {
+      if (!p) return "";
+      if (isCanadaProps(p)) {
+        const pr = normalizeCanadaPruid2(p.PRUID) || normalizeCanadaPruid2(String(p.GEOID || "").replace(/^CA-/i,""));
+        if (!pr) return "";
+        return "CA-" + pr;
+      }
+      return normalizeUsGeoid(p.GEOID || p.geoid || p.GEOID10 || p.GEO_ID || "");
+    }
+
+    function getRegionDisplayNameFromProps(p) {
+      if (!p) return "Unknown";
+      if (isCanadaProps(p)) {
+        const pr = normalizeCanadaPruid2(p.PRUID);
+        const info = pr ? CA_PROV_INFO[pr] : null;
+        return String(p.NAME || (info ? info.name : "") || "Unknown").trim();
+      }
+      return String(p.NAME || p.name || p.NAMELSAD || "Unknown").trim();
+    }
+
+    function getRegionTagFromProps(p) {
+      if (!p) return "";
+      if (isCanadaProps(p)) return "CANADA";
+      return String(p.STUSPS || p.STATE_NAME || p.state || p.STATE || "").trim();
+    }
+
+    function normalizeStateAbbrev(v) {
+      const t = String(v ?? "").trim().toUpperCase();
+      if (/^[A-Z]{2}$/.test(t)) return t;
+      return "";
+    }
+
+    // =========================
+    // SPEED CAMERA PARSING
+    // =========================
+    function camTypeFromText(text) {
+      const s = String(text || "");
+      if (/\(\s*fmcw\s*\)/i.test(s)) return "FMCW";
+      if (/\(\s*mrct\s*\)/i.test(s)) return "MRCT";
+      if (/\(\s*k-?\s*band\s*\)/i.test(s)) return "K";
+      if (/\(\s*lidar\s*\)/i.test(s)) return "LiDAR";
+      if (/\(\s*gatso\s*\)/i.test(s)) return "Gatso";
+      if (/\(\s*point\s*-\s*2\s*-\s*point\s*\)/i.test(s) || /\(\s*point\s*2\s*point\s*\)/i.test(s)) return "P2P";
+      return "FMCW";
+    }
+
+    function normalizeCamParts(raw) {
+      if (!hasValid(raw)) return [];
+      const t = normalizeBreaksToNewlines(raw);
+      return t
+        .split(/;|\n/)
+        .map(s => s.trim())
+        .filter(Boolean);
+    }
+
+    function getCamItemsFromRow(row) {
+      if (!row) return [];
+      if (Array.isArray(row.__camItems)) return row.__camItems;
+      const raw = getField(row, "SpeedCameras", "Speed Cameras", "Speed_Cameras", "Speed Camera", "SpeedCamera", "Cameras");
+      const parts = normalizeCamParts(raw);
+      const items = parts.map(p => ({ text: p, type: camTypeFromText(p) }));
+      row.__camItems = items;
+      return items;
+    }
+
+    function collectSpeedCameraItems(rows) {
+      const out = [];
+      const seen = new Set();
+      for (const row of (rows || [])) {
+        const items = getCamItemsFromRow(row);
+        for (const it of (items || [])) {
+          const key = String(it.text || "").trim().toLowerCase();
+          if (!key) continue;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          out.push({ text: it.text, type: it.type });
+        }
+      }
+      return out;
+    }
+
+    // =========================
+    // MAP + DATA STATE
+    // =========================
+    let map, vgLayer;
+    let usGeojsonCache;
+    let canadaProvincesCache = null;
+    let canadaLayer = null;
+
+    // Regions data
+    const rowsByRegion = new Map(); // key => rows (counties + CA provinces)
+    const rowsByState = new Map();  // state abbrev => state agency rows
+
+    // Presence sets for styling
+    const hasX = new Set();
+    const hasK = new Set();
+    const hasKa = new Set();
+    const hasLidar = new Set();
+    const hasDE = new Set();
+    const hasCams = new Set();
+    const hasAny = new Set();
+
+    // Lookup for route grouping + zoom
+    const regionPropsByKey = new Map();
+    const regionBoundsByKey = new Map();
+
+    // Spatial index for point-in-polygon routing lookup
+    let countySpatialIndex = [];
+    let canadaSpatialIndex = [];
+
+    // Route state
+    let routeStart = null; // L.LatLng
+    let routeEnd = null;   // L.LatLng
+    let routeStartMarker = null;
+    let routeEndMarker = null;
+    let routeLine = null;
+
+    let youMarker = null;
+
+    let routeRegionOrder = [];
+    let routeStateGroups = [];
+    const routeStateOpen = new Map();
+    const routeCountyOpen = new Set();
+
+    // =========================
+    // GEOJSON BOUNDS + SPATIAL LOOKUP
+    // =========================
+    function boundsFromGeometry(geom) {
+      if (!geom || !geom.type || !geom.coordinates) return null;
+      let minLat =  90, minLng =  180;
+      let maxLat = -90, maxLng = -180;
+
+      function touchCoord(coord) {
+        const lng = coord[0], lat = coord[1];
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+        if (lat < minLat) minLat = lat;
+        if (lat > maxLat) maxLat = lat;
+        if (lng < minLng) minLng = lng;
+        if (lng > maxLng) maxLng = lng;
+      }
+      function walkCoords(c) {
+        if (!Array.isArray(c)) return;
+        if (typeof c[0] === "number" && typeof c[1] === "number") { touchCoord(c); return; }
+        for (const child of c) walkCoords(child);
+      }
+      walkCoords(geom.coordinates);
+
+      if (minLat > maxLat || minLng > maxLng) return null;
+      return L.latLngBounds([minLat, minLng], [maxLat, maxLng]);
+    }
+
+    function pointInRing(lng, lat, ring) {
+      let inside = false;
+      for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        const xi = ring[i][0], yi = ring[i][1];
+        const xj = ring[j][0], yj = ring[j][1];
+        const intersect = ((yi > lat) !== (yj > lat)) &&
+          (lng < (xj - xi) * (lat - yi) / ((yj - yi) || 1e-12) + xi);
+        if (intersect) inside = !inside;
+      }
+      return inside;
+    }
+
+    function pointInPolygonGeom(lng, lat, geom) {
+      if (!geom) return false;
+
+      if (geom.type === "Polygon") {
+        const rings = geom.coordinates || [];
+        if (!rings.length) return false;
+        const outer = rings[0];
+        if (!pointInRing(lng, lat, outer)) return false;
+        for (let r = 1; r < rings.length; r++) {
+          if (pointInRing(lng, lat, rings[r])) return false;
+        }
+        return true;
+      }
+
+      if (geom.type === "MultiPolygon") {
+        const polys = geom.coordinates || [];
+        for (const poly of polys) {
+          if (!poly || !poly.length) continue;
+          const outer = poly[0];
+          if (!outer) continue;
+          if (!pointInRing(lng, lat, outer)) continue;
+
+          let inHole = false;
+          for (let r = 1; r < poly.length; r++) {
+            if (pointInRing(lng, lat, poly[r])) { inHole = true; break; }
+          }
+          if (!inHole) return true;
+        }
+        return false;
+      }
+
+      return false;
+    }
+
+    function bboxContains(b, lng, lat) {
+      return lng >= b[0] && lng <= b[2] && lat >= b[1] && lat <= b[3];
+    }
+
+    function regionKeyForPoint(lng, lat) {
+      for (const it of canadaSpatialIndex) {
+        if (!bboxContains(it.bbox, lng, lat)) continue;
+        if (pointInPolygonGeom(lng, lat, it.geom)) return it.key;
+      }
+      for (const it of countySpatialIndex) {
+        if (!bboxContains(it.bbox, lng, lat)) continue;
+        if (pointInPolygonGeom(lng, lat, it.geom)) return it.key;
+      }
+      return "";
+    }
+
+    function indexUsGeojson() {
+      if (!usGeojsonCache?.features) return;
+      for (const f of usGeojsonCache.features) {
+        const p = f.properties || {};
+        const key = normalizeUsGeoid(p.GEOID || p.geoid || p.GEOID10 || p.GEO_ID || "");
+        if (!key) continue;
+
+        regionPropsByKey.set(key, p);
+
+        const b = boundsFromGeometry(f.geometry);
+        if (b) regionBoundsByKey.set(key, b);
+      }
+    }
+
+    function indexCanadaGeojson() {
+      if (!canadaProvincesCache?.features) return;
+      for (const f of canadaProvincesCache.features) {
+        const p = f.properties || {};
+        const key = regionKeyFromProps(p);
+        if (!key) continue;
+
+        regionPropsByKey.set(key, p);
+
+        const b = boundsFromGeometry(f.geometry);
+        if (b) regionBoundsByKey.set(key, b);
+      }
+    }
+
+    function buildSpatialIndexes() {
+      countySpatialIndex = [];
+      canadaSpatialIndex = [];
+
+      if (usGeojsonCache?.features) {
+        for (const f of usGeojsonCache.features) {
+          const p = f.properties || {};
+          const key = normalizeUsGeoid(p.GEOID || p.geoid || p.GEOID10 || p.GEO_ID || "");
+          if (!key) continue;
+          const b = boundsFromGeometry(f.geometry);
+          if (!b) continue;
+          countySpatialIndex.push({
+            key,
+            bbox: [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()],
+            geom: f.geometry
+          });
+        }
+      }
+
+      if (canadaProvincesCache?.features) {
+        for (const f of canadaProvincesCache.features) {
+          const p = f.properties || {};
+          const key = regionKeyFromProps(p);
+          if (!key) continue;
+          const b = boundsFromGeometry(f.geometry);
+          if (!b) continue;
+          canadaSpatialIndex.push({
+            key,
+            bbox: [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()],
+            geom: f.geometry
+          });
+        }
+      }
+    }
+
+    // =========================
+    // CANADA DISSOLVE -> PROVINCES
+    // =========================
+    function geomToMultiPolyCoords(geom) {
+      if (!geom) return null;
+      if (geom.type === "Polygon") return [geom.coordinates];
+      if (geom.type === "MultiPolygon") return geom.coordinates;
+      return null;
+    }
+
+    function dissolveCanadaToProvinces(caGeo) {
+      if (!caGeo?.features) return null;
+
+      const groups = new Map(); // pruid -> multipolygon coords
+      for (const f of caGeo.features) {
+        const p = f.properties || {};
+        const pr = normalizeCanadaPruid2(p.PRUID);
+        if (!pr) continue;
+
+        const mp = geomToMultiPolyCoords(f.geometry);
+        if (!mp) continue;
+
+        if (!groups.has(pr)) {
+          groups.set(pr, mp);
+        } else {
+          const acc = groups.get(pr);
+          try {
+            const merged = polygonClipping.union(acc, mp);
+            groups.set(pr, merged);
+          } catch {
+            groups.set(pr, acc.concat(mp));
+          }
+        }
+      }
+
+      const features = [];
+      for (const [pr, coords] of groups.entries()) {
+        const info = CA_PROV_INFO[pr] || { abbr: "", name: "" };
+        const key = "CA-" + pr;
+        features.push({
+          type: "Feature",
+          properties: { COUNTRY:"CANADA", PRUID: pr, GEOID: key, ABBR: info.abbr, NAME: info.name || key },
+          geometry: { type: "MultiPolygon", coordinates: coords }
+        });
+      }
+
+      return { type: "FeatureCollection", features };
+    }
+
+    // =========================
+    // LOAD CSV DATA + BUILD PRESENCE SETS
+    // =========================
+    async function loadCountyCsv() {
+      const res = await fetch(COUNTY_CSV_URL);
+      if (!res.ok) throw new Error("County CSV fetch failed: " + res.status);
+      const text = await res.text();
+      const parsed = Papa.parse(text, { header: true, skipEmptyLines: true });
+
+      rowsByRegion.clear();
+      hasX.clear(); hasK.clear(); hasKa.clear(); hasLidar.clear(); hasDE.clear(); hasCams.clear(); hasAny.clear();
+
+      for (const raw of parsed.data) {
+        if (!raw) continue;
+
+        // US county key
+        let key = normalizeUsGeoid(raw.GEOID);
+
+        // Canada province rows may exist in the sheet with GEOID like "CA-##"
+        const maybe = String(raw.GEOID || "").trim();
+        if (/^CA-\d{1,2}$/i.test(maybe)) {
+          const pr = maybe.split("-")[1].padStart(2,"0");
+          key = "CA-" + pr;
+        }
+
+        if (!key) continue;
+
+        const row = {};
+        for (const k of Object.keys(raw)) {
+          if (!k) continue;
+          row[k.trim()] = (raw[k] ?? "").toString().trim();
+        }
+
+        if (!rowsByRegion.has(key)) rowsByRegion.set(key, []);
+        rowsByRegion.get(key).push(row);
+
+        const anyX = hasValid(row["X_band"]);
+        const anyK = hasValid(row["K_band"]);
+        const anyKa = hasValid(row["Ka_band"]);
+        const anyL = hasValid(row["Lidar_Guns"]);
+        const anyDE = containsDE(row["Lidar_Guns"]);
+        const camItems = getCamItemsFromRow(row);
+        const anyCams = camItems.length > 0;
+
+        if (anyX) hasX.add(key);
+        if (anyK) hasK.add(key);
+        if (anyKa) hasKa.add(key);
+        if (anyL) hasLidar.add(key);
+        if (anyDE) hasDE.add(key);
+        if (anyCams) hasCams.add(key);
+
+        if (anyX || anyK || anyKa || anyL || anyDE || anyCams) hasAny.add(key);
+      }
+    }
+
+    async function loadStateAgencyCsv() {
+      const res = await fetch(STATE_AGENCY_CSV_URL);
+      if (!res.ok) throw new Error("State Agency CSV fetch failed: " + res.status);
+      const text = await res.text();
+      const parsed = Papa.parse(text, { header: true, skipEmptyLines: true });
+
+      rowsByState.clear();
+
+      for (const raw of parsed.data) {
+        if (!raw) continue;
+
+        const ab =
+          normalizeStateAbbrev(raw.State) ||
+          normalizeStateAbbrev(raw.STATE) ||
+          normalizeStateAbbrev(raw.ST) ||
+          normalizeStateAbbrev(raw.STUSPS) ||
+          normalizeStateAbbrev(raw.Abbrev) ||
+          normalizeStateAbbrev(raw.ABBR);
+
+        if (!ab) continue;
+
+        const row = {};
+        for (const k of Object.keys(raw)) {
+          if (!k) continue;
+          row[k.trim()] = (raw[k] ?? "").toString().trim();
+        }
+
+        if (!rowsByState.has(ab)) rowsByState.set(ab, []);
+        rowsByState.get(ab).push(row);
+      }
+    }
+
+    // =========================
+    // MAP STYLING (ALL TOGGLES ON, NO FILTERS)
+    // =========================
+    function styleForRegionKey(key) {
+      const s = {
+        weight: 1.4,
+        color: "#111",
+        opacity: 1,
+        fill: true,
+        fillColor: "#f2f2f2",
+        fillOpacity: 0.20
+      };
+
+      if (!key) return s;
+      if (!hasAny.has(key)) return s;
+
+      const cats = [];
+      if (hasX.has(key)) cats.push("x");
+      if (hasK.has(key)) cats.push("k");
+      if (hasKa.has(key)) cats.push("ka");
+      if (hasLidar.has(key)) cats.push("lidar");
+      if (hasDE.has(key)) cats.push("de");
+      if (hasCams.has(key)) cats.push("cams");
+
+      if (cats.length >= 2) {
+        s.fillColor = COLOR.multi;
+        s.fillOpacity = 0.55;
+        s.weight = 2.0;
+        return s;
+      }
+
+      const only = cats[0] || "multi";
+      s.fillColor = COLOR[only] || COLOR.multi;
+      s.fillOpacity = 0.50;
+      return s;
+    }
+
+    async function buildCountyVectorLayer() {
+      if (!usGeojsonCache) return;
+
+      if (vgLayer) {
+        map.removeLayer(vgLayer);
+        vgLayer = null;
+      }
+
+      vgLayer = L.vectorGrid.slicer(usGeojsonCache, {
+        maxZoom: 12,
+        tolerance: 3,
+        extent: 4096,
+        buffer: 256,
+        rendererFactory: L.svg.tile,
+        pane: "countiesPane",
+        interactive: true,
+        getFeatureId: f => {
+          const p = (f && f.properties) ? f.properties : {};
+          return normalizeUsGeoid(p.GEOID || p.geoid || p.GEOID10 || p.GEO_ID || "");
+        },
+        vectorTileLayerStyles: {
+          sliced: props => {
+            const key = normalizeUsGeoid(props.GEOID || props.geoid || props.GEOID10 || props.GEO_ID || "");
+            return styleForRegionKey(key);
+          }
+        }
+      });
+
+      vgLayer.addTo(map);
+
+      // keep click popup only (no “selected region” panel anymore)
+      vgLayer.on("click", (e) => {
+        const props =
+          (e && e.layer && e.layer.properties) ? e.layer.properties :
+          (e && e.properties) ? e.properties : {};
+        const key = normalizeUsGeoid(props.GEOID || props.geoid || props.GEOID10 || props.GEO_ID || "");
+        const name = props.NAME || props.NAMELSAD || "Region";
+        const st = props.STUSPS ? `, ${props.STUSPS}` : "";
+        L.popup().setLatLng(e.latlng).setContent(`<strong>${escapeHtml(name)}${escapeHtml(st)}</strong>`).openOn(map);
+      });
+    }
+
+    async function addCanadaLayer() {
+      if (!canadaProvincesCache?.features) return;
+
+      map.createPane("canadaPane");
+      map.getPane("canadaPane").style.zIndex = 640;
+
+      if (canadaLayer) map.removeLayer(canadaLayer);
+
+      canadaLayer = L.geoJSON(canadaProvincesCache, {
+        pane: "canadaPane",
+        interactive: true,
+        style: (feature) => {
+          const p = feature?.properties || {};
+          const key = regionKeyFromProps(p);
+          const base = {
+            color: "#000",
+            weight: 4,
+            opacity: 0.9,
+            lineJoin: "round",
+            fill: true,
+            fillColor: "#000",
+            fillOpacity: 0.0
+          };
+          const s = styleForRegionKey(key);
+          base.fillColor = s.fillColor;
+          base.fillOpacity = hasAny.has(key) ? 0.35 : 0.0;
+          return base;
+        },
+        onEachFeature: (feature, layer) => {
+          layer.on("click", (e) => {
+            const p = feature?.properties || {};
+            const name = getRegionDisplayNameFromProps(p);
+            L.popup().setLatLng(e.latlng).setContent(`<strong>${escapeHtml(name)}, CANADA</strong>`).openOn(map);
+          });
+        }
+      }).addTo(map);
+    }
+
+    // =========================
+    // ROUTE MATH
+    // =========================
+    function haversineMeters(lng1, lat1, lng2, lat2) {
+      const R = 6371000;
+      const toRad = d => d * Math.PI / 180;
+      const dLat = toRad(lat2 - lat1);
+      const dLng = toRad(lng2 - lng1);
+      const a =
+        Math.sin(dLat/2) * Math.sin(dLat/2) +
+        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+        Math.sin(dLng/2) * Math.sin(dLng/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      return R * c;
+    }
+
+    function sampleLineString(coords, stepMeters) {
+      if (!coords || coords.length < 2) return coords || [];
+      const out = [];
+      let [prevLng, prevLat] = coords[0];
+      out.push([prevLng, prevLat]);
+      let carry = 0;
+
+      for (let i = 1; i < coords.length; i++) {
+        let [lng, lat] = coords[i];
+        let seg = haversineMeters(prevLng, prevLat, lng, lat);
+        if (!Number.isFinite(seg) || seg <= 0) { prevLng = lng; prevLat = lat; continue; }
+
+        while (carry + seg >= stepMeters) {
+          const need = stepMeters - carry;
+          const t = need / seg;
+          const iLng = prevLng + (lng - prevLng) * t;
+          const iLat = prevLat + (lat - prevLat) * t;
+          out.push([iLng, iLat]);
+          prevLng = iLng; prevLat = iLat;
+          seg = haversineMeters(prevLng, prevLat, lng, lat);
+          carry = 0;
+          if (!Number.isFinite(seg) || seg <= 0) break;
+        }
+
+        carry += seg;
+        prevLng = lng; prevLat = lat;
+      }
+
+      const last = coords[coords.length - 1];
+      const lastOut = out[out.length - 1];
+      if (!lastOut || lastOut[0] !== last[0] || lastOut[1] !== last[1]) out.push(last);
+      return out;
+    }
+
+    function fmtLL(ll) {
+      if (!ll) return "not set";
+      return `${ll.lat.toFixed(5)}, ${ll.lng.toFixed(5)}`;
+    }
+
+    // =========================
+    // ROUTE GROUPING (US states + CA provinces)
+    // =========================
+    function groupIdForRegionKey(key) {
+      const props = regionPropsByKey.get(key);
+      if (!props) return "";
+
+      if (String(key).toUpperCase().startsWith("CA-") || isCanadaProps(props)) {
+        const ab = String(props.ABBR || "").trim().toUpperCase();
+        const pr = normalizeCanadaPruid2(props.PRUID) || normalizeCanadaPruid2(String(key).replace(/^CA-/i,""));
+        const safe = ab || (pr ? ("CA-" + pr) : key);
+        return "CA:" + safe;
+      }
+
+      const ab = normalizeStateAbbrev(props.STUSPS || props.STATE || props.state || "");
+      return ab || "";
+    }
+
+    function groupTitleForId(groupId) {
+      if (!groupId) return "Unknown";
+      if (groupId.startsWith("CA:")) {
+        const ab = groupId.slice(3);
+        let name = "Canada";
+        for (const [k,p] of regionPropsByKey.entries()) {
+          if (!p) continue;
+          if (!isCanadaProps(p)) continue;
+          const pab = String(p.ABBR || "").trim().toUpperCase();
+          if (pab && pab === ab) { name = getRegionDisplayNameFromProps(p); break; }
+        }
+        return `${name} (${ab})`;
+      }
+      const ab = groupId;
+      const name = STATE_NAME_MAP[ab] || ab;
+      return `${name} (${ab})`;
+    }
+
+    function buildStateGroupsFromRoute() {
+      const groups = new Map();
+      const order = [];
+
+      for (const key of routeRegionOrder) {
+        const gid = groupIdForRegionKey(key);
+        if (!gid) continue;
+
+        if (!groups.has(gid)) {
+          groups.set(gid, {
+            id: gid,
+            title: groupTitleForId(gid),
+            isCanada: gid.startsWith("CA:"),
+            abbrev: gid.startsWith("CA:") ? gid.slice(3) : gid,
+            regionKeys: []
+          });
+          order.push(gid);
+
+          // default collapsed for all (including first)
+          if (!routeStateOpen.has(gid)) routeStateOpen.set(gid, false);
+        }
+
+        const g = groups.get(gid);
+        if (!g.regionKeys.includes(key)) g.regionKeys.push(key);
+      }
+
+      routeStateGroups = order.map(id => groups.get(id)).filter(Boolean);
+    }
+
+    function regionTitleForKey(key) {
+      const props = regionPropsByKey.get(key);
+      if (!props) return key;
+      const name = getRegionDisplayNameFromProps(props);
+      const tag = getRegionTagFromProps(props);
+      return tag ? `${name}, ${tag}` : name;
+    }
+
+    // =========================
+    // ROLLUPS (NO FILTERS, NO +)
+    // =========================
+    function splitItems(v) {
+      if (!hasValid(v)) return [];
+      return normalizeBreaksToNewlines(v).split(/;|\n/).map(s => s.trim()).filter(Boolean);
+    }
+
+    function normalizeKaGunName(v) {
+      let t = String(v || "").trim();
+      if (!t) return "";
+      t = t.replace(/\([^)]*\)/g, " ");
+      t = t.replace(/\b(33\.8|34\.7|35\.5)\b/g, " ");
+      t = t.replace(/\bka\b/ig, " ");
+      t = t.replace(/\bdsr\s*2x\b/ig, "DSR2X").replace(/\bdsr2x\b/ig, "DSR2X");
+      t = t.replace(/\s+/g, " ").trim();
+      if (/\bDSR2X\b/i.test(t) && !/\bstalker\b/i.test(t)) t = `Stalker ${t}`;
+      return t;
+    }
+
+    function buildThreatRollup(rows) {
+      const out = { x: [], k: [], ka: [], lidar: [], de: [], cams: [] };
+      const seen = { x: new Set(), k: new Set(), ka: new Set(), lidar: new Set(), de: new Set(), cams: new Set() };
+
+      const pushDedupe = (arr, set, val) => {
+        const t = String(val || "").trim();
+        if (!t) return;
+        const k = t.toLowerCase();
+        if (set.has(k)) return;
+        set.add(k);
+        arr.push(t);
+      };
+
+      for (const row of (rows || [])) {
+        for (const it of splitItems(row["X_band"])) pushDedupe(out.x, seen.x, it);
+        for (const it of splitItems(row["K_band"])) pushDedupe(out.k, seen.k, it);
+
+        for (const it of splitItems(row["Ka_band"])) {
+          const n = normalizeKaGunName(it);
+          if (n) pushDedupe(out.ka, seen.ka, n);
+        }
+
+        for (const it of splitItems(row["Lidar_Guns"])) {
+          if (containsDE(it)) pushDedupe(out.de, seen.de, it);
+          else pushDedupe(out.lidar, seen.lidar, it);
+        }
+
+        const cams = getCamItemsFromRow(row);
+        for (const c of cams) pushDedupe(out.cams, seen.cams, c.text);
+      }
+
+      return out;
+    }
+
+    function listOrNone(arr) {
+      return (arr && arr.length) ? escapeHtml(arr.join(", ")) : `<span class="rollup-empty">None</span>`;
+    }
+
+    function rollupHtml(roll) {
+      return `
+        <div class="rollup">
+          <div class="rollup-title">Threats encountered</div>
+          <div class="rollup-line"><strong>Ka:</strong> ${listOrNone(roll.ka)}</div>
+          <div class="rollup-line"><strong>K:</strong> ${listOrNone(roll.k)}</div>
+          <div class="rollup-line"><strong>X:</strong> ${listOrNone(roll.x)}</div>
+          <div class="rollup-line"><strong>LiDAR:</strong> ${listOrNone(roll.lidar)}</div>
+          <div class="rollup-line"><strong>DE:</strong> ${listOrNone(roll.de)}</div>
+          <div class="rollup-line"><strong>Speed Cameras:</strong> ${listOrNone(roll.cams)}</div>
+        </div>
+      `;
+    }
+
+    function presenceForRows(rows) {
+      const set = new Set();
+      for (const row of (rows || [])) {
+        if (hasValid(row["X_band"])) set.add("x");
+        if (hasValid(row["K_band"])) set.add("k");
+        if (hasValid(row["Ka_band"])) set.add("ka");
+        if (hasValid(row["Lidar_Guns"])) set.add("lidar");
+        if (containsDE(row["Lidar_Guns"])) set.add("de");
+        const cams = getCamItemsFromRow(row);
+        if (cams && cams.length) set.add("cams");
+      }
+      return set;
+    }
+
+    function pillsHtml(presence) {
+      const pills = [];
+      const has = (k) => presence.has(k);
+      if (presence.size > 1) pills.push(`<span class="pill multi">Multi</span>`);
+      if (has("x")) pills.push(`<span class="pill x">X</span>`);
+      if (has("k")) pills.push(`<span class="pill k">K</span>`);
+      if (has("ka")) pills.push(`<span class="pill ka">Ka</span>`);
+      if (has("lidar")) pills.push(`<span class="pill lidar">LiDAR</span>`);
+      if (has("de")) pills.push(`<span class="pill de">DE</span>`);
+      if (has("cams")) pills.push(`<span class="pill cams">Cams</span>`);
+      return pills.join("");
+    }
+
+    // =========================
+    // RECORDS HTML (original sheet rows)
+    // =========================
+    function recordsHtmlForRegionKey(key) {
+      const rows = rowsByRegion.get(key) || [];
+      if (!rows.length) return `<div style="font-size:12.5px; color:#666;">No data for this region yet.</div>`;
+
+      let out = "";
+      let idx = 0;
+
+      for (const row of rows) {
+        if (!rowHasAnyContent(row)) continue;
+        idx++;
+
+        const agency = escapeHtml(row["Law_Enforcement_Agency_Name"] || "Unknown agency");
+
+        const xVal  = hasValid(row["X_band"])  ? formatMulti(row["X_band"])  : "";
+        const kaVal = hasValid(row["Ka_band"]) ? formatMulti(row["Ka_band"]) : "";
+        const kVal  = hasValid(row["K_band"])  ? formatMulti(row["K_band"])  : "";
+        const lidar = hasValid(row["Lidar_Guns"]) ? formatMulti(row["Lidar_Guns"]) : "";
+
+        const tactics = hasValid(row["Special_Tactics"]) ? formatNotesWithLinks(row["Special_Tactics"]) : "";
+        const flags = flagsHtmlFromRow(row);
+
+        let bandsHtml = "";
+        if (xVal || kaVal || kVal) {
+          bandsHtml += `<div><strong>Bands</strong></div>`;
+          if (xVal)  bandsHtml += `<div>- <strong>X:</strong><br>${xVal}</div>`;
+          if (kaVal) bandsHtml += `<div style="margin-top:4px;">- <strong>Ka:</strong><br>${kaVal}</div>`;
+          if (kVal)  bandsHtml += `<div style="margin-top:4px;">- <strong>K:</strong><br>${kVal}</div>`;
+        }
+
+        out += `
+          <div class="record" style="margin-bottom:10px;">
+            <div style="font-weight:900; margin-bottom:6px;">${idx}. ${agency}</div>
+            ${bandsHtml}
+            ${lidar ? `<div style="margin-top:6px;"><strong>Lidar:</strong><br>${lidar}</div>` : ""}
+            ${flags ? `${flags}` : ""}
+            ${tactics ? `<div style="margin-top:6px;"><strong>Special tactics:</strong><br>${tactics}</div>` : ""}
+          </div>
+        `;
+      }
+
+      // combined speed cam list
+      const cams = collectSpeedCameraItems(rows);
+      if (cams.length) {
+        out += `
+          <div class="record">
+            <div style="font-weight:900; margin-bottom:6px;">Speed Cameras</div>
+            <div style="font-size:12px; line-height:1.25;">${escapeHtml(cams.map(c => c.text).join(", "))}</div>
+          </div>
+        `;
+      }
+
+      return out || `<div style="font-size:12.5px; color:#666;">No usable rows in this region yet.</div>`;
+    }
+
+    // =========================
+    // FOCUS / HIGHLIGHT
+    // =========================
+    let focusedRegionKey = null;
+    let focusedCanadaLayer = null;
+
+    function clearFocusHighlight() {
+      if (focusedRegionKey && vgLayer && !String(focusedRegionKey).toUpperCase().startsWith("CA-")) {
+        try { vgLayer.resetFeatureStyle(focusedRegionKey); } catch {}
+      }
+      focusedRegionKey = null;
+
+      if (focusedCanadaLayer) {
+        // reset canada styles by rebuilding quickly (cheap enough)
+        canadaLayer.setStyle(feature => {
+          const p = feature?.properties || {};
+          const key = regionKeyFromProps(p);
+          const base = { color:"#000", weight:4, opacity:0.9, lineJoin:"round", fill:true, fillColor:"#000", fillOpacity:0.0 };
+          const s = styleForRegionKey(key);
+          base.fillColor = s.fillColor;
+          base.fillOpacity = hasAny.has(key) ? 0.35 : 0.0;
+          return base;
+        });
+        focusedCanadaLayer = null;
+      }
+    }
+
+    function focusRegion(key) {
+      const b = regionBoundsByKey.get(key);
+      if (b) map.fitBounds(b, { padding: [20, 20] });
+
+      clearFocusHighlight();
+      focusedRegionKey = key;
+
+      if (String(key).toUpperCase().startsWith("CA-")) {
+        if (!canadaLayer) return;
+        canadaLayer.eachLayer(layer => {
+          const p = layer.feature?.properties || {};
+          const k = regionKeyFromProps(p);
+          if (k === key) {
+            focusedCanadaLayer = layer;
+            layer.setStyle({ weight: 6, fillOpacity: 0.55, fillColor: COLOR.multi });
+          }
+        });
+        return;
+      }
+
+      if (vgLayer) {
+        const base = styleForRegionKey(key);
+        base.weight = 4;
+        base.color = "#000";
+        base.fillOpacity = Math.max(base.fillOpacity || 0.2, 0.55);
+        vgLayer.setFeatureStyle(key, base);
+      }
+    }
+
+    // =========================
+    // ROUTE BUILD
+    // =========================
+    async function buildRoute() {
+      if (!routeStart || !routeEnd) return;
+
+      setRouteStatus("Building route…");
+
+      const s = routeStart;
+      const e = routeEnd;
+
+      const url =
+        `${OSRM_ROUTE_URL}${s.lng},${s.lat};${e.lng},${e.lat}` +
+        `?overview=full&geometries=geojson&alternatives=false&steps=false`;
+
+      let data;
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`OSRM route failed: ${res.status}`);
+        data = await res.json();
+      } catch (err) {
+        console.error(err);
+        setRouteStatus("Route fetch failed. Try again.");
+        return;
+      }
+
+      const coords = data?.routes?.[0]?.geometry?.coordinates;
+      if (!coords || coords.length < 2) {
+        setRouteStatus("No route found.");
+        return;
+      }
+
+      const latlngs = coords.map(c => [c[1], c[0]]);
+
+      if (routeLine) map.removeLayer(routeLine);
+      routeLine = L.polyline(latlngs, { weight: 5, opacity: 0.85 }).addTo(map);
+      map.fitBounds(routeLine.getBounds(), { padding: [20, 20] });
+
+      const sampled = sampleLineString(coords, ROUTE_SAMPLE_STEP_METERS);
+
+      const order = [];
+      let last = "";
+      for (const pt of sampled) {
+        const k = regionKeyForPoint(pt[0], pt[1]);
+        if (!k) continue;
+        if (k !== last) { order.push(k); last = k; }
+      }
+
+      routeRegionOrder = order;
+      buildStateGroupsFromRoute();
+      renderRouteResults();
+
+      setRouteStatus(`Start: ${fmtLL(routeStart)} | End: ${fmtLL(routeEnd)} | Regions crossed: ${routeRegionOrder.length}`);
+    }
+
+    function clearRoute() {
+      routeStart = null;
+      routeEnd = null;
+      routeRegionOrder = [];
+      routeStateGroups = [];
+      routeStateOpen.clear();
+      routeCountyOpen.clear();
+      focusedRegionKey = null;
+      focusedCanadaLayer = null;
+
+      if (routeStartMarker) { map.removeLayer(routeStartMarker); routeStartMarker = null; }
+      if (routeEndMarker) { map.removeLayer(routeEndMarker); routeEndMarker = null; }
+      if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
+
+      const resultsEl = document.getElementById("routeResults");
+      resultsEl.style.display = "none";
+      resultsEl.innerHTML = "";
+
+      setRouteStatus("Type From/To (use suggestions), then Build. Locate sets From automatically.");
+    }
+
+    // =========================
+    // ROUTE RESULTS RENDER
+    // =========================
+    function renderRouteResults() {
+      const resultsEl = document.getElementById("routeResults");
+      if (!routeRegionOrder.length) {
+        resultsEl.style.display = "none";
+        resultsEl.innerHTML = "";
+        return;
+      }
+
+      const stateCount = routeStateGroups.length;
+      const regionCount = routeRegionOrder.length;
+
+      let html = `
+        <div style="font-size:12.5px; color:#333; margin-bottom:10px; line-height:1.25;">
+          <strong>Route summary:</strong> ${stateCount} state/province${stateCount === 1 ? "" : "s"}, ${regionCount} region${regionCount === 1 ? "" : "s"}.
+        </div>
+      `;
+
+      for (const g of routeStateGroups) {
+        const open = !!routeStateOpen.get(g.id);
+
+        const countyRows = [];
+        for (const key of g.regionKeys) {
+          const rows = rowsByRegion.get(key) || [];
+          countyRows.push(...rows);
+        }
+
+        const stateRows = (!g.isCanada && rowsByState.has(g.abbrev)) ? (rowsByState.get(g.abbrev) || []) : [];
+        const combinedRows = stateRows.concat(countyRows);
+
+        const roll = buildThreatRollup(combinedRows);
+
+        const stateRecordCount = stateRows.length;
+        const countyCount = g.regionKeys.length;
+
+        const sub = g.isCanada
+          ? `${countyCount} region${countyCount===1?"":"s"} on route`
+          : `${stateRecordCount} state record${stateRecordCount===1?"":"s"} • ${countyCount} count${countyCount===1?"y":"ies"} on route`;
+
+        html += `
+          <div class="route-state-card" data-state="${escapeAttr(g.id)}">
+            <div class="route-state-head">
+              <div class="route-state-left">
+                <div class="route-state-title">${escapeHtml(g.title)}</div>
+                <div class="route-state-sub">${escapeHtml(sub)}</div>
+              </div>
+
+              <button type="button" class="btn expand-btn" data-action="toggleState" data-state="${escapeAttr(g.id)}">
+                ${open ? "Collapse ▴" : "Tap to expand ▾"}
+              </button>
+            </div>
+
+            ${rollupHtml(roll)}
+
+            <div class="route-state-body ${open ? "open" : ""}" data-body="${escapeAttr(g.id)}">
+              ${(!g.isCanada && stateRows.length) ? `
+                <div style="margin-top:10px;">
+                  <div style="font-size:12.5px; font-weight:950; margin-bottom:6px;">State agencies</div>
+                  ${stateRows.map((r, i) => {
+                    const name = escapeHtml(r["Law_Enforcement_Agency_Name"] || r["Agency"] || r["Agency_Name"] || r["Name"] || "Unknown agency");
+                    return `<div class="record" style="margin-bottom:10px;">
+                      <div style="font-weight:900; margin-bottom:6px;">${i+1}. ${name}</div>
+                      ${hasValid(r["X_band"]) || hasValid(r["K_band"]) || hasValid(r["Ka_band"]) ? `
+                        <div><strong>Bands</strong></div>
+                        ${hasValid(r["X_band"]) ? `<div>- <strong>X:</strong><br>${formatMulti(r["X_band"])}</div>` : ""}
+                        ${hasValid(r["Ka_band"]) ? `<div style="margin-top:4px;">- <strong>Ka:</strong><br>${formatMulti(r["Ka_band"])}</div>` : ""}
+                        ${hasValid(r["K_band"]) ? `<div style="margin-top:4px;">- <strong>K:</strong><br>${formatMulti(r["K_band"])}</div>` : ""}
+                      ` : ""}
+                      ${hasValid(r["Lidar_Guns"]) ? `<div style="margin-top:6px;"><strong>Lidar:</strong><br>${formatMulti(r["Lidar_Guns"])}</div>` : ""}
+                      ${flagsHtmlFromRow(r) || ""}
+                      ${hasValid(r["Special_Tactics"]) ? `<div style="margin-top:6px;"><strong>Special tactics:</strong><br>${formatNotesWithLinks(r["Special_Tactics"])}</div>` : ""}
+                      ${hasValid(r["Notes"]) ? `<div style="margin-top:6px;"><strong>Notes:</strong><br>${formatNotesWithLinks(r["Notes"])}</div>` : ""}
+                    </div>`;
+                  }).join("")}
+                </div>
+              ` : ""}
+
+              <div style="margin-top:10px;">
+                <div style="font-size:12.5px; font-weight:950; margin-bottom:6px;">${g.isCanada ? "Regions on route" : "Counties on route"}</div>
+
+                ${g.regionKeys.map((key) => {
+                  const title = regionTitleForKey(key);
+                  const rows = rowsByRegion.get(key) || [];
+                  const presence = presenceForRows(rows);
+                  const pills = pillsHtml(presence);
+
+                  const id = `${g.id}|${key}`;
+                  const openC = routeCountyOpen.has(id);
+
+                  return `
+                    <div class="record" data-county="${escapeAttr(id)}">
+                      <div class="route-county-row">
+                        <div>
+                          <div class="route-county-title">${escapeHtml(title)}</div>
+                          <div class="route-county-sub">${rows.length} sheet record${rows.length===1?"":"s"}</div>
+                          <div class="pillrow">${pills || ""}</div>
+                        </div>
+
+                        <div class="actions-col">
+                          <button type="button" class="btn focus-btn" data-action="focus" data-key="${escapeAttr(key)}">⌖ Focus</button>
+                          <button type="button" class="btn expand-btn" data-action="toggleCounty" data-id="${escapeAttr(id)}">
+                            ${openC ? "Collapse ▴" : "Tap to expand ▾"}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div class="route-county-expand ${openC ? "open" : ""}" data-countybody="${escapeAttr(id)}">
+                        ${recordsHtmlForRegionKey(key)}
+                      </div>
+                    </div>
+                  `;
+                }).join("")}
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      resultsEl.innerHTML = html;
+      resultsEl.style.display = "block";
+
+      // bind buttons
+      resultsEl.querySelectorAll('button[data-action="toggleState"]').forEach(btn => {
+        btn.addEventListener("click", () => {
+          const id = btn.getAttribute("data-state");
+          const cur = !!routeStateOpen.get(id);
+          routeStateOpen.set(id, !cur);
+          renderRouteResults();
+        });
+      });
+
+      resultsEl.querySelectorAll('button[data-action="toggleCounty"]').forEach(btn => {
+        btn.addEventListener("click", () => {
+          const id = btn.getAttribute("data-id");
+          if (routeCountyOpen.has(id)) routeCountyOpen.delete(id);
+          else routeCountyOpen.add(id);
+          renderRouteResults();
+        });
+      });
+
+      resultsEl.querySelectorAll('button[data-action="focus"]').forEach(btn => {
+        btn.addEventListener("click", () => {
+          const key = btn.getAttribute("data-key");
+          focusRegion(key);
+        });
+      });
+    }
+
+    // =========================
+    // NOMINATIM AUTOCOMPLETE
+    // =========================
+    function pickSuggestion(which, lat, lng, label) {
+      const ll = L.latLng(lat, lng);
+      if (which === "from") {
+        routeStart = ll;
+        if (routeStartMarker) map.removeLayer(routeStartMarker);
+        routeStartMarker = L.marker(routeStart, { draggable: true }).addTo(map);
+        routeStartMarker.on("dragend", async () => {
+          routeStart = routeStartMarker.getLatLng();
+          const addr = await reverseGeocode(routeStart.lat, routeStart.lng);
+          if (addr) document.getElementById("fromInput").value = addr;
+          if (routeStart && routeEnd) buildRoute();
+        });
+        document.getElementById("fromInput").value = label;
+      } else {
+        routeEnd = ll;
+        if (routeEndMarker) map.removeLayer(routeEndMarker);
+        routeEndMarker = L.marker(routeEnd, { draggable: true }).addTo(map);
+        routeEndMarker.on("dragend", async () => {
+          routeEnd = routeEndMarker.getLatLng();
+          const addr = await reverseGeocode(routeEnd.lat, routeEnd.lng);
+          if (addr) document.getElementById("toInput").value = addr;
+          if (routeStart && routeEnd) buildRoute();
+        });
+        document.getElementById("toInput").value = label;
+      }
+
+      map.setView(ll, Math.max(map.getZoom(), 12));
+    }
+
+    async function reverseGeocode(lat, lng) {
+      const url = `${NOMINATIM_REVERSE}${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}`;
+      const res = await fetch(url, { headers: { "Accept": "application/json" } });
+      if (!res.ok) return "";
+      const data = await res.json();
+      return String(data.display_name || "").trim();
+    }
+
+    async function fetchSuggestions(q) {
+      const t = String(q || "").trim();
+      if (t.length < 3) return [];
+      const url = NOMINATIM_SEARCH + encodeURIComponent(t);
+      const res = await fetch(url, { headers: { "Accept": "application/json" } });
+      if (!res.ok) return [];
+      const arr = await res.json();
+      if (!Array.isArray(arr)) return [];
+      return arr
+        .map(x => ({
+          lat: parseFloat(x.lat),
+          lng: parseFloat(x.lon),
+          label: String(x.display_name || "").trim(),
+          top: String(x.name || "").trim()
+        }))
+        .filter(x => Number.isFinite(x.lat) && Number.isFinite(x.lng) && x.label);
+    }
+
+    function renderSuggestions(el, items, onPick) {
+      if (!items.length) {
+        el.classList.remove("open");
+        el.innerHTML = "";
+        return;
+      }
+
+      el.innerHTML = items.map((it, idx) => {
+        const top = it.top ? it.top : it.label.split(",")[0];
+        const sub = it.label;
+        return `
+          <div class="s-item" data-idx="${idx}">
+            <div class="s-top">${escapeHtml(top)}</div>
+            <div class="s-sub">${escapeHtml(sub)}</div>
+          </div>
+        `;
+      }).join("");
+
+      el.classList.add("open");
+
+      el.querySelectorAll(".s-item").forEach(node => {
+        node.addEventListener("click", () => {
+          const idx = parseInt(node.getAttribute("data-idx"), 10);
+          const it = items[idx];
+          if (!it) return;
+          el.classList.remove("open");
+          el.innerHTML = "";
+          onPick(it);
+        });
+      });
+    }
+
+    function attachAutocomplete(inputId, sugId, which) {
+      const input = document.getElementById(inputId);
+      const sug = document.getElementById(sugId);
+
+      let tmr = null;
+      let lastQuery = "";
+
+      input.addEventListener("input", () => {
+        const q = input.value;
+        lastQuery = q;
+
+        if (tmr) clearTimeout(tmr);
+        tmr = setTimeout(async () => {
+          // close if user changed fast
+          const current = input.value;
+          if (current !== lastQuery) return;
+
+          const items = await fetchSuggestions(current);
+          // still current?
+          if (input.value !== current) return;
+
+          renderSuggestions(sug, items, (it) => pickSuggestion(which, it.lat, it.lng, it.label));
+        }, 220);
+      });
+
+      input.addEventListener("focus", async () => {
+        const q = input.value;
+        if (q.trim().length >= 3) {
+          const items = await fetchSuggestions(q);
+          renderSuggestions(sug, items, (it) => pickSuggestion(which, it.lat, it.lng, it.label));
+        }
+      });
+
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+          sug.classList.remove("open");
+          sug.innerHTML = "";
+        }
+        if (e.key === "Enter") {
+          // Build on Enter
+          e.preventDefault();
+          document.getElementById("routeBuildBtn").click();
+        }
+      });
+
+      document.addEventListener("click", (e) => {
+        const wrap = input.parentElement;
+        if (!wrap.contains(e.target)) {
+          sug.classList.remove("open");
+          sug.innerHTML = "";
+        }
+      });
+    }
+
+    // =========================
+    // ROUTE UI
+    // =========================
+    function initRouteUI() {
+      const fromEl = document.getElementById("fromInput");
+      const toEl = document.getElementById("toInput");
+
+      attachAutocomplete("fromInput", "fromSug", "from");
+      attachAutocomplete("toInput", "toSug", "to");
+
+      const locateBtn = document.getElementById("locateBtn");
+      const swapBtn = document.getElementById("swapBtn");
+      const buildBtn = document.getElementById("routeBuildBtn");
+      const clearBtn = document.getElementById("routeClearBtn");
+
+      locateBtn.addEventListener("click", () => {
+        if (!navigator.geolocation) {
+          setRouteStatus("Geolocation not supported in this browser.");
+          return;
+        }
+        setRouteStatus("Getting your location…");
+
+        navigator.geolocation.getCurrentPosition(async (pos) => {
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+
+          const ll = L.latLng(lat, lng);
+
+          // player marker
+          const icon = L.divIcon({ className: "", html: `<div class="player-icon"></div>`, iconSize: [22,22], iconAnchor: [11,11] });
+          if (youMarker) map.removeLayer(youMarker);
+          youMarker = L.marker(ll, { icon }).addTo(map);
+
+          // also sets FROM
+          routeStart = ll;
+          if (routeStartMarker) map.removeLayer(routeStartMarker);
+          routeStartMarker = L.marker(routeStart, { draggable: true }).addTo(map);
+          routeStartMarker.on("dragend", async () => {
+            routeStart = routeStartMarker.getLatLng();
+            const addr = await reverseGeocode(routeStart.lat, routeStart.lng);
+            if (addr) fromEl.value = addr;
+            if (routeStart && routeEnd) buildRoute();
+          });
+
+          try {
+            const addr = await reverseGeocode(lat, lng);
+            if (addr) fromEl.value = addr;
+          } catch {}
+
+          map.setView(ll, Math.max(map.getZoom(), 12));
+          setRouteStatus(`From set from your location. To: ${fmtLL(routeEnd)}.`);
+          if (routeStart && routeEnd) buildRoute();
+        }, () => {
+          setRouteStatus("Location failed. Allow location permission and try again.");
+        }, { enableHighAccuracy: true, timeout: 12000 });
+      });
+
+      swapBtn.addEventListener("click", () => {
+        const tmp = fromEl.value;
+        fromEl.value = toEl.value;
+        toEl.value = tmp;
+
+        const tmpLL = routeStart;
+        routeStart = routeEnd;
+        routeEnd = tmpLL;
+
+        if (routeStartMarker) { map.removeLayer(routeStartMarker); routeStartMarker = null; }
+        if (routeEndMarker) { map.removeLayer(routeEndMarker); routeEndMarker = null; }
+
+        if (routeStart) {
+          routeStartMarker = L.marker(routeStart, { draggable: true }).addTo(map);
+          routeStartMarker.on("dragend", async () => {
+            routeStart = routeStartMarker.getLatLng();
+            const addr = await reverseGeocode(routeStart.lat, routeStart.lng);
+            if (addr) fromEl.value = addr;
+            if (routeStart && routeEnd) buildRoute();
+          });
+        }
+
+        if (routeEnd) {
+          routeEndMarker = L.marker(routeEnd, { draggable: true }).addTo(map);
+          routeEndMarker.on("dragend", async () => {
+            routeEnd = routeEndMarker.getLatLng();
+            const addr = await reverseGeocode(routeEnd.lat, routeEnd.lng);
+            if (addr) toEl.value = addr;
+            if (routeStart && routeEnd) buildRoute();
+          });
+        }
+
+        if (routeStart && routeEnd) buildRoute();
+        else setRouteStatus(`Start: ${fmtLL(routeStart)} | End: ${fmtLL(routeEnd)}`);
+      });
+
+      async function geocodeOne(q) {
+        const t = String(q || "").trim();
+        if (!t) return null;
+        const url = NOMINATIM_SEARCH + encodeURIComponent(t);
+        const res = await fetch(url, { headers: { "Accept": "application/json" } });
+        if (!res.ok) return null;
+        const arr = await res.json();
+        if (!Array.isArray(arr) || !arr.length) return null;
+        const hit = arr[0];
+        const lat = parseFloat(hit.lat);
+        const lng = parseFloat(hit.lon);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+        return { lat, lng, label: String(hit.display_name || t).trim() };
+      }
+
+      buildBtn.addEventListener("click", async () => {
+        setRouteStatus("Resolving From/To…");
+
+        if (!routeStart) {
+          const hit = await geocodeOne(fromEl.value);
+          if (!hit) { setRouteStatus("Could not find From. Pick a suggestion or type a clearer address."); return; }
+          pickSuggestion("from", hit.lat, hit.lng, hit.label);
+        }
+
+        if (!routeEnd) {
+          const hit = await geocodeOne(toEl.value);
+          if (!hit) { setRouteStatus("Could not find To. Pick a suggestion or type a clearer address."); return; }
+          pickSuggestion("to", hit.lat, hit.lng, hit.label);
+        }
+
+        if (routeStart && routeEnd) {
+          await buildRoute();
+          setSidebarOpen(true);
+        }
+      });
+
+      clearBtn.addEventListener("click", () => clearRoute());
+    }
+
+    // =========================
+    // BOOTSTRAP
+    // =========================
+    async function bootstrap() {
+      try {
+        setStatus("Loading CSV data…");
+        await Promise.all([loadCountyCsv(), loadStateAgencyCsv()]);
+
+        setStatus("Loading US county shapes…");
+        const usRes = await fetch(GEOJSON_URL);
+        if (!usRes.ok) throw new Error("GeoJSON fetch failed (US): " + usRes.status);
+        usGeojsonCache = await usRes.json();
+
+        setStatus("Loading Canada shapes…");
+        try {
+          const caRes = await fetch(CANADA_GEOJSON_URL);
+          if (caRes.ok) {
+            const caGeo = await caRes.json();
+            setStatus("Building Canada provinces…");
+            canadaProvincesCache = dissolveCanadaToProvinces(caGeo);
+          }
+        } catch (e) {
+          console.warn("Canada.json fetch error:", e);
+        }
+
+        map = L.map("map").setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          maxZoom: 19,
+          attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+
+        map.createPane("countiesPane");
+        map.getPane("countiesPane").style.zIndex = 650;
+
+        indexUsGeojson();
+        if (canadaProvincesCache) indexCanadaGeojson();
+        buildSpatialIndexes();
+
+        await buildCountyVectorLayer();
+        if (canadaProvincesCache) await addCanadaLayer();
+
+        setTimeout(() => map.invalidateSize(), 0);
+        window.addEventListener("resize", () => map.invalidateSize());
+
+        initRouteUI();
+
+        setSidebarOpen(false);
+        setStatus("Ready. Use From/To suggestions, then Build.");
+
+      } catch (err) {
+        console.error(err);
+        setStatus("Error loading data. Open console for details.");
+      }
+    }
+
+    bootstrap();
+</script>
+</body>
+</html>
