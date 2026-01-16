@@ -21,19 +21,38 @@
             async src="https://gc.zgo.at/count.js"></script>
 
     <style>
-        html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+        html, body {
+          height: 100%;
+          margin: 0;
+          font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+          overflow: hidden; /* FIX: prevents page-level overscroll past bottom */
+        }
         #app { display: flex; height: 100vh; width: 100vw; }
         #map { flex: 2; min-width: 0; }
 
         /* Sidebar */
-        #sidebar {
+        #sidebar{
           flex: 1;
           max-width: 460px;
           border-left: 1px solid #e6e6e6;
-          padding: 14px 14px 28px; /* extra bottom padding fixes last-item scroll */
+          padding: 14px;
           box-sizing: border-box;
-          overflow-y: auto;
           background: #fafafa;
+
+          /* FIX: make sidebar a fixed-height flex column; only inner scroll scrolls */
+          height: 100vh;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+        }
+
+        /* Scroll container inside sidebar (this is the real scroll area) */
+        #sidebarScroll{
+          flex: 1;
+          min-height: 0;            /* critical for flex scrolling */
+          overflow-y: auto;
+          overscroll-behavior: contain;
+          padding-bottom: 14px;     /* small, no giant blank space */
         }
 
         .panel {
@@ -223,7 +242,7 @@
           background:#fff;
           padding: 10px;
           margin-bottom: 10px;
-          overflow: visible; /* IMPORTANT: fixes bottom expand scroll clipping */
+          overflow: visible;
         }
 
         .route-state-head{
@@ -233,9 +252,7 @@
           align-items:start;
         }
 
-        .route-state-left{
-          min-width: 0;
-        }
+        .route-state-left{ min-width: 0; }
 
         .route-state-title{
           font-weight: 950;
@@ -349,13 +366,12 @@
           line-height: 1;
           white-space: nowrap;
         }
-        .pill.x     { border-color: gold;   background: rgba(234,214,122,0.20); }
-        .pill.k     { border-color: orange; background: rgba(231,176,106,0.20); }
-        .pill.ka    { border-color: #2D68C4; background: rgba(126,139,255,0.20); }
-        .pill.lidar { border-color: red;    background: rgba(229,122,111,0.20); }
-        .pill.de    { border-color: purple; background: rgba(165,122,217,0.20); }
-        .pill.cams  { border-color: #65FE08; background: rgba(143,214,143,0.20); }
-        .pill.multi { border-color: #55C4BE; background: rgba(85,196,190,0.16); }
+        .pill.x     { border-color: gold;     background: rgba(234,214,122,0.20); }
+        .pill.k     { border-color: orange;   background: rgba(231,176,106,0.20); }
+        .pill.ka    { border-color: #2D68C4;  background: rgba(126,139,255,0.20); }
+        .pill.lidar { border-color: red;      background: rgba(229,122,111,0.20); }
+        .pill.de    { border-color: purple;   background: rgba(165,122,217,0.20); }
+        .pill.cams  { border-color: #65FE08;  background: rgba(143,214,143,0.20); }
 
         .actions-col{
           display:flex;
@@ -439,41 +455,44 @@
             </div>
         </div>
 
-        <div class="panel" id="routePlannerPanel">
-            <h2>Route</h2>
+        <!-- FIX: inner scroll area -->
+        <div id="sidebarScroll">
+            <div class="panel" id="routePlannerPanel">
+                <h2>Route</h2>
 
-            <div class="route-grid">
-                <div class="input-wrap">
-                    <input id="fromInput" class="search-input" placeholder="From (address or place)…" autocomplete="off" />
-                    <div id="fromSug" class="suggestions" aria-label="From suggestions"></div>
+                <div class="route-grid">
+                    <div class="input-wrap">
+                        <input id="fromInput" class="search-input" placeholder="From (address or place)…" autocomplete="off" />
+                        <div id="fromSug" class="suggestions" aria-label="From suggestions"></div>
+                    </div>
+                    <button id="locateBtn" class="btn teal" type="button" title="Use your current location">
+                        ⌖ Locate
+                    </button>
                 </div>
-                <button id="locateBtn" class="btn teal" type="button" title="Use your current location">
-                    ⌖ Locate
-                </button>
-            </div>
 
-            <div style="height:8px;"></div>
+                <div style="height:8px;"></div>
 
-            <div class="route-grid">
-                <div class="input-wrap">
-                    <input id="toInput" class="search-input" placeholder="To (address or place)…" autocomplete="off" />
-                    <div id="toSug" class="suggestions" aria-label="To suggestions"></div>
+                <div class="route-grid">
+                    <div class="input-wrap">
+                        <input id="toInput" class="search-input" placeholder="To (address or place)…" autocomplete="off" />
+                        <div id="toSug" class="suggestions" aria-label="To suggestions"></div>
+                    </div>
+                    <button id="swapBtn" class="btn" type="button" title="Swap from/to">
+                        ⇄ Swap
+                    </button>
                 </div>
-                <button id="swapBtn" class="btn" type="button" title="Swap from/to">
-                    ⇄ Swap
-                </button>
-            </div>
 
-            <div class="route-actions">
-                <button class="btn" id="routeBuildBtn" type="button">Build</button>
-                <button class="btn" id="routeClearBtn" type="button">Clear</button>
-            </div>
+                <div class="route-actions">
+                    <button class="btn" id="routeBuildBtn" type="button">Build</button>
+                    <button class="btn" id="routeClearBtn" type="button">Clear</button>
+                </div>
 
-            <div id="routeStatus" style="margin-top:10px; font-size:12.5px; color:#444; line-height:1.25;">
-                Type From/To (use suggestions), then Build. Locate sets From automatically.
-            </div>
+                <div id="routeStatus" style="margin-top:10px; font-size:12.5px; color:#444; line-height:1.25;">
+                    Type From/To (use suggestions), then Build. Locate sets From automatically.
+                </div>
 
-            <div id="routeResults" style="margin-top:10px; display:none;"></div>
+                <div id="routeResults" style="margin-top:10px; display:none;"></div>
+            </div>
         </div>
     </div>
 </div>
@@ -507,9 +526,14 @@
     const OSRM_ROUTE_URL = "https://router.project-osrm.org/route/v1/driving/";
     const ROUTE_SAMPLE_STEP_METERS = 1200;
 
-    // Nominatim (OSM) autocomplete + geocode
-    const NOMINATIM_SEARCH = "https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=6&q=";
-    const NOMINATIM_REVERSE = "https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&addressdetails=1&lat=";
+    // Nominatim (OSM) autocomplete + geocode (restrict to US/CA so you don't get random NZ)
+    const NOMINATIM_COUNTRYCODES = "us,ca";
+    const NOMINATIM_SEARCH =
+      "https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=6&countrycodes=" +
+      encodeURIComponent(NOMINATIM_COUNTRYCODES) +
+      "&q=";
+    const NOMINATIM_REVERSE =
+      "https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&addressdetails=1&lat=";
 
     // Map colors (no filters here — just “what exists”)
     const COLOR = {
@@ -519,7 +543,7 @@
       lidar: "red",
       de: "purple",
       cams: "#65FE08",
-      multi: "#55C4BE"
+      multi: "#55C4BE" // keep teal on-map for multi-category regions
     };
 
     const STATE_NAME_MAP = {
@@ -846,10 +870,7 @@
     function normalizeCamParts(raw) {
       if (!hasValid(raw)) return [];
       const t = normalizeBreaksToNewlines(raw);
-      return t
-        .split(/;|\n/)
-        .map(s => s.trim())
-        .filter(Boolean);
+      return t.split(/;|\n/).map(s => s.trim()).filter(Boolean);
     }
 
     function getCamItemsFromRow(row) {
@@ -913,6 +934,7 @@
     let routeStartMarker = null;
     let routeEndMarker = null;
     let routeLine = null;
+    let routeLineGlow = null;
 
     let youMarker = null;
 
@@ -1234,7 +1256,7 @@
       if (hasCams.has(key)) cats.push("cams");
 
       if (cats.length >= 2) {
-        s.fillColor = COLOR.multi;
+        s.fillColor = COLOR.multi;   // teal on-map when multiple categories exist
         s.fillOpacity = 0.55;
         s.weight = 2.0;
         return s;
@@ -1276,12 +1298,10 @@
 
       vgLayer.addTo(map);
 
-      // keep click popup only (no “selected region” panel anymore)
       vgLayer.on("click", (e) => {
         const props =
           (e && e.layer && e.layer.properties) ? e.layer.properties :
           (e && e.properties) ? e.properties : {};
-        const key = normalizeUsGeoid(props.GEOID || props.geoid || props.GEOID10 || props.GEO_ID || "");
         const name = props.NAME || props.NAMELSAD || "Region";
         const st = props.STUSPS ? `, ${props.STUSPS}` : "";
         L.popup().setLatLng(e.latlng).setContent(`<strong>${escapeHtml(name)}${escapeHtml(st)}</strong>`).openOn(map);
@@ -1404,7 +1424,7 @@
       if (groupId.startsWith("CA:")) {
         const ab = groupId.slice(3);
         let name = "Canada";
-        for (const [k,p] of regionPropsByKey.entries()) {
+        for (const [,p] of regionPropsByKey.entries()) {
           if (!p) continue;
           if (!isCanadaProps(p)) continue;
           const pab = String(p.ABBR || "").trim().toUpperCase();
@@ -1540,10 +1560,10 @@
       return set;
     }
 
+    // REMOVE MULTI pill (but keep teal on-map)
     function pillsHtml(presence) {
       const pills = [];
       const has = (k) => presence.has(k);
-      if (presence.size > 1) pills.push(`<span class="pill multi">Multi</span>`);
       if (has("x")) pills.push(`<span class="pill x">X</span>`);
       if (has("k")) pills.push(`<span class="pill k">K</span>`);
       if (has("ka")) pills.push(`<span class="pill ka">Ka</span>`);
@@ -1551,6 +1571,12 @@
       if (has("de")) pills.push(`<span class="pill de">DE</span>`);
       if (has("cams")) pills.push(`<span class="pill cams">Cams</span>`);
       return pills.join("");
+    }
+
+    function regionHasDetails(key) {
+      const rows = rowsByRegion.get(key) || [];
+      if (!rows.length) return false;
+      return rows.some(r => rowHasAnyContent(r));
     }
 
     // =========================
@@ -1596,7 +1622,6 @@
         `;
       }
 
-      // combined speed cam list
       const cams = collectSpeedCameraItems(rows);
       if (cams.length) {
         out += `
@@ -1623,7 +1648,6 @@
       focusedRegionKey = null;
 
       if (focusedCanadaLayer) {
-        // reset canada styles by rebuilding quickly (cheap enough)
         canadaLayer.setStyle(feature => {
           const p = feature?.properties || {};
           const key = regionKeyFromProps(p);
@@ -1701,7 +1725,24 @@
       const latlngs = coords.map(c => [c[1], c[0]]);
 
       if (routeLine) map.removeLayer(routeLine);
-      routeLine = L.polyline(latlngs, { weight: 5, opacity: 0.85 }).addTo(map);
+if (routeLineGlow) map.removeLayer(routeLineGlow);
+
+routeLineGlow = L.polyline(latlngs, {
+  color: "#2D68C4",
+  weight: 10,
+  opacity: 0.25,
+  lineJoin: "round",
+  lineCap: "round"
+}).addTo(map);
+
+routeLine = L.polyline(latlngs, {
+  color: "#2D68C4",
+  weight: 6,
+  opacity: 1,
+  lineJoin: "round",
+  lineCap: "round"
+}).addTo(map);
+
       map.fitBounds(routeLine.getBounds(), { padding: [20, 20] });
 
       const sampled = sampleLineString(coords, ROUTE_SAMPLE_STEP_METERS);
@@ -1766,22 +1807,24 @@
         const open = !!routeStateOpen.get(g.id);
 
         const countyRows = [];
+        let detailsCount = 0;
+
         for (const key of g.regionKeys) {
           const rows = rowsByRegion.get(key) || [];
           countyRows.push(...rows);
+          if (regionHasDetails(key)) detailsCount++;
         }
 
         const stateRows = (!g.isCanada && rowsByState.has(g.abbrev)) ? (rowsByState.get(g.abbrev) || []) : [];
         const combinedRows = stateRows.concat(countyRows);
-
         const roll = buildThreatRollup(combinedRows);
 
         const stateRecordCount = stateRows.length;
         const countyCount = g.regionKeys.length;
 
         const sub = g.isCanada
-          ? `${countyCount} region${countyCount===1?"":"s"} on route`
-          : `${stateRecordCount} state record${stateRecordCount===1?"":"s"} • ${countyCount} count${countyCount===1?"y":"ies"} on route`;
+          ? `${detailsCount}/${countyCount} regions with details on route`
+          : `${stateRecordCount} state record${stateRecordCount===1?"":"s"} • ${detailsCount}/${countyCount} counties with details on route`;
 
         html += `
           <div class="route-state-card" data-state="${escapeAttr(g.id)}">
@@ -1833,12 +1876,15 @@
                   const id = `${g.id}|${key}`;
                   const openC = routeCountyOpen.has(id);
 
+                  // show count of usable rows, not raw rows
+                  const usableRows = rows.filter(r => rowHasAnyContent(r)).length;
+
                   return `
                     <div class="record" data-county="${escapeAttr(id)}">
                       <div class="route-county-row">
                         <div>
                           <div class="route-county-title">${escapeHtml(title)}</div>
-                          <div class="route-county-sub">${rows.length} sheet record${rows.length===1?"":"s"}</div>
+                          <div class="route-county-sub">${usableRows} sheet record${usableRows===1?"":"s"}</div>
                           <div class="pillrow">${pills || ""}</div>
                         </div>
 
@@ -1865,7 +1911,6 @@
       resultsEl.innerHTML = html;
       resultsEl.style.display = "block";
 
-      // bind buttons
       resultsEl.querySelectorAll('button[data-action="toggleState"]').forEach(btn => {
         btn.addEventListener("click", () => {
           const id = btn.getAttribute("data-state");
@@ -1940,14 +1985,29 @@
       if (!res.ok) return [];
       const arr = await res.json();
       if (!Array.isArray(arr)) return [];
-      return arr
-        .map(x => ({
-          lat: parseFloat(x.lat),
-          lng: parseFloat(x.lon),
-          label: String(x.display_name || "").trim(),
+
+      // de-dupe by display_name to avoid duplicates
+      const seen = new Set();
+      const out = [];
+
+      for (const x of arr) {
+        const lat = parseFloat(x.lat);
+        const lng = parseFloat(x.lon);
+        const label = String(x.display_name || "").trim();
+        if (!Number.isFinite(lat) || !Number.isFinite(lng) || !label) continue;
+
+        const key = label.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+
+        out.push({
+          lat, lng,
+          label,
           top: String(x.name || "").trim()
-        }))
-        .filter(x => Number.isFinite(x.lat) && Number.isFinite(x.lng) && x.label);
+        });
+      }
+
+      return out;
     }
 
     function renderSuggestions(el, items, onPick) {
@@ -1995,12 +2055,10 @@
 
         if (tmr) clearTimeout(tmr);
         tmr = setTimeout(async () => {
-          // close if user changed fast
           const current = input.value;
           if (current !== lastQuery) return;
 
           const items = await fetchSuggestions(current);
-          // still current?
           if (input.value !== current) return;
 
           renderSuggestions(sug, items, (it) => pickSuggestion(which, it.lat, it.lng, it.label));
@@ -2021,7 +2079,6 @@
           sug.innerHTML = "";
         }
         if (e.key === "Enter") {
-          // Build on Enter
           e.preventDefault();
           document.getElementById("routeBuildBtn").click();
         }
