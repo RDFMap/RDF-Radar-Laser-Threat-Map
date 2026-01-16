@@ -25,7 +25,7 @@
           height: 100%;
           margin: 0;
           font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-          overflow: hidden; /* FIX: prevents page-level overscroll past bottom */
+          overflow: hidden;
         }
         #app { display: flex; height: 100vh; width: 100vw; }
         #map { flex: 2; min-width: 0; }
@@ -38,21 +38,19 @@
           padding: 14px;
           box-sizing: border-box;
           background: #fafafa;
-
-          /* FIX: make sidebar a fixed-height flex column; only inner scroll scrolls */
           height: 100vh;
           display: flex;
           flex-direction: column;
           overflow: hidden;
         }
 
-        /* Scroll container inside sidebar (this is the real scroll area) */
+        /* Scroll container inside sidebar */
         #sidebarScroll{
           flex: 1;
-          min-height: 0;            /* critical for flex scrolling */
+          min-height: 0;
           overflow-y: auto;
           overscroll-behavior: contain;
-          padding-bottom: 14px;     /* small, no giant blank space */
+          padding-bottom: 14px;
         }
 
         .panel {
@@ -198,11 +196,10 @@
         .s-top{ font-weight: 800; font-size: 12.5px; }
         .s-sub{ color:#666; font-size: 11.5px; margin-top: 2px; }
 
-        /* Buttons (route actions) */
+        /* Buttons */
         .btn{
           --btn-color:#D0D0D0;
           --btn-tint:rgba(0,0,0,0.06);
-          --btn-on-text:#111;
           display: inline-flex;
           align-items: center;
           justify-content: center;
@@ -219,6 +216,7 @@
           font-weight: 900;
           line-height: 1;
           white-space: nowrap;
+          text-decoration: none;
         }
         .btn:hover{ background: rgba(0,0,0,0.08); }
 
@@ -280,7 +278,6 @@
           font-weight: 900;
         }
 
-        /* Combined threats block (full width, line-per-category, no +) */
         .rollup{
           margin-top: 10px;
           border-top: 1px solid #eee;
@@ -309,7 +306,6 @@
         }
         .route-state-body.open{ display:block; }
 
-        /* County card */
         .record {
           border: 1px solid #eee;
           border-radius: 12px;
@@ -394,7 +390,7 @@
         }
         .route-county-expand.open{ display:block; }
 
-        /* Notes/special tactics */
+        /* Notes links formatting */
         .notes-block { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
         .note-line { line-height: 1.25; overflow-wrap: anywhere; word-break: break-word; }
         .note-link { display: inline-flex; align-items: center; gap: 6px; text-decoration: underline; font-weight: 650; overflow-wrap: anywhere; word-break: break-word; }
@@ -423,6 +419,22 @@
           top: 50%;
           transform: translate(-50%,-50%);
         }
+
+        /* New: “More accurate route” helper */
+        .helper-box{
+          margin-top:10px;
+          padding: 10px;
+          border: 1px solid #eee;
+          border-radius: 12px;
+          background: #fff;
+          font-size: 12.5px;
+          color:#333;
+          line-height: 1.25;
+        }
+        .helper-box strong{ font-weight: 950; }
+        .helper-box a{ text-decoration: underline; font-weight: 850; }
+        .helper-steps{ margin-top: 8px; }
+        .helper-steps div{ margin-top: 4px; }
     </style>
 </head>
 
@@ -455,7 +467,6 @@
             </div>
         </div>
 
-        <!-- FIX: inner scroll area -->
         <div id="sidebarScroll">
             <div class="panel" id="routePlannerPanel">
                 <h2>Route</h2>
@@ -485,10 +496,33 @@
                 <div class="route-actions">
                     <button class="btn" id="routeBuildBtn" type="button">Build</button>
                     <button class="btn" id="routeClearBtn" type="button">Clear</button>
+
+                    <!-- New: Google-route helper buttons (OSRM stays default) -->
+                    <button class="btn" id="openGmapsBtn" type="button" title="Open this route in Google Maps in a new tab">
+                        Open Google Maps
+                    </button>
+
+                    <label class="btn" style="cursor:pointer;" title="Import a GPX track (ex: from MapstoGPX)">
+                        Import GPX
+                        <input id="gpxFile" type="file" accept=".gpx,application/gpx+xml" style="display:none;">
+                    </label>
                 </div>
 
                 <div id="routeStatus" style="margin-top:10px; font-size:12.5px; color:#444; line-height:1.25;">
                     Type From/To (use suggestions), then Build. Locate sets From automatically.
+                </div>
+
+                <!-- New: instructions + MapstoGPX link -->
+                <div class="helper-box" id="moreAccurateBox">
+                    <strong>Want a more accurate route than OSRM?</strong><br>
+                    OSRM is solid for geometry, but it’s OpenStreetMap-based and not traffic-aware. If you want something closer to the route Google would actually send you on right now, use Google Maps + MapstoGPX and import the GPX here.
+                    <div class="helper-steps">
+                        <div><strong>1)</strong> Click <strong>Open Google Maps</strong> above.</div>
+                        <div><strong>2)</strong> In Google Maps, make sure the route looks right (tolls / avoid highways / whatever).</div>
+                        <div><strong>3)</strong> Copy the Google Maps directions URL from your browser/mobile app.</div>
+                        <div><strong>4)</strong> Open <a href="https://mapstogpx.com" target="_blank" rel="noopener noreferrer">mapstogpx.com</a>, paste the URL, and download the GPX.</div>
+                        <div><strong>5)</strong> Click <strong>Import GPX</strong> here and select the GPX file. This will draw that route and run the same route analysis.</div>
+                    </div>
                 </div>
 
                 <div id="routeResults" style="margin-top:10px; display:none;"></div>
@@ -526,7 +560,7 @@
     const OSRM_ROUTE_URL = "https://router.project-osrm.org/route/v1/driving/";
     const ROUTE_SAMPLE_STEP_METERS = 1200;
 
-    // Nominatim (OSM) autocomplete + geocode (restrict to US/CA so you don't get random NZ)
+    // Nominatim (OSM) autocomplete + geocode (restrict to US/CA)
     const NOMINATIM_COUNTRYCODES = "us,ca";
     const NOMINATIM_SEARCH =
       "https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=6&countrycodes=" +
@@ -535,7 +569,7 @@
     const NOMINATIM_REVERSE =
       "https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&addressdetails=1&lat=";
 
-    // Map colors (no filters here — just “what exists”)
+    // Map colors
     const COLOR = {
       x: "gold",
       k: "orange",
@@ -543,7 +577,7 @@
       lidar: "red",
       de: "purple",
       cams: "#65FE08",
-      multi: "#55C4BE" // keep teal on-map for multi-category regions
+      multi: "#55C4BE"
     };
 
     const STATE_NAME_MAP = {
@@ -908,8 +942,8 @@
     let canadaLayer = null;
 
     // Regions data
-    const rowsByRegion = new Map(); // key => rows (counties + CA provinces)
-    const rowsByState = new Map();  // state abbrev => state agency rows
+    const rowsByRegion = new Map();
+    const rowsByState = new Map();
 
     // Presence sets for styling
     const hasX = new Set();
@@ -1108,7 +1142,7 @@
     function dissolveCanadaToProvinces(caGeo) {
       if (!caGeo?.features) return null;
 
-      const groups = new Map(); // pruid -> multipolygon coords
+      const groups = new Map();
       for (const f of caGeo.features) {
         const p = f.properties || {};
         const pr = normalizeCanadaPruid2(p.PRUID);
@@ -1159,10 +1193,7 @@
       for (const raw of parsed.data) {
         if (!raw) continue;
 
-        // US county key
         let key = normalizeUsGeoid(raw.GEOID);
-
-        // Canada province rows may exist in the sheet with GEOID like "CA-##"
         const maybe = String(raw.GEOID || "").trim();
         if (/^CA-\d{1,2}$/i.test(maybe)) {
           const pr = maybe.split("-")[1].padStart(2,"0");
@@ -1256,7 +1287,7 @@
       if (hasCams.has(key)) cats.push("cams");
 
       if (cats.length >= 2) {
-        s.fillColor = COLOR.multi;   // teal on-map when multiple categories exist
+        s.fillColor = COLOR.multi;
         s.fillOpacity = 0.55;
         s.weight = 2.0;
         return s;
@@ -1455,7 +1486,6 @@
           });
           order.push(gid);
 
-          // default collapsed for all (including first)
           if (!routeStateOpen.has(gid)) routeStateOpen.set(gid, false);
         }
 
@@ -1475,7 +1505,7 @@
     }
 
     // =========================
-    // ROLLUPS (NO FILTERS, NO +)
+    // ROLLUPS
     // =========================
     function splitItems(v) {
       if (!hasValid(v)) return [];
@@ -1560,7 +1590,6 @@
       return set;
     }
 
-    // REMOVE MULTI pill (but keep teal on-map)
     function pillsHtml(presence) {
       const pills = [];
       const has = (k) => presence.has(k);
@@ -1580,7 +1609,7 @@
     }
 
     // =========================
-    // RECORDS HTML (original sheet rows)
+    // RECORDS HTML
     // =========================
     function recordsHtmlForRegionKey(key) {
       const rows = rowsByRegion.get(key) || [];
@@ -1691,7 +1720,49 @@
     }
 
     // =========================
-    // ROUTE BUILD
+    // ROUTE DRAW + ANALYZE (shared by OSRM + GPX import)
+    // =========================
+    function drawRoutePolyline(latlngs) {
+      if (routeLine) map.removeLayer(routeLine);
+      if (routeLineGlow) map.removeLayer(routeLineGlow);
+
+      routeLineGlow = L.polyline(latlngs, {
+        color: "#2D68C4",
+        weight: 10,
+        opacity: 0.25,
+        lineJoin: "round",
+        lineCap: "round"
+      }).addTo(map);
+
+      routeLine = L.polyline(latlngs, {
+        color: "#2D68C4",
+        weight: 6,
+        opacity: 1,
+        lineJoin: "round",
+        lineCap: "round"
+      }).addTo(map);
+
+      map.fitBounds(routeLine.getBounds(), { padding: [20, 20] });
+    }
+
+    function analyzeRouteCoords(coordsLngLat) {
+      const sampled = sampleLineString(coordsLngLat, ROUTE_SAMPLE_STEP_METERS);
+
+      const order = [];
+      let last = "";
+      for (const pt of sampled) {
+        const k = regionKeyForPoint(pt[0], pt[1]);
+        if (!k) continue;
+        if (k !== last) { order.push(k); last = k; }
+      }
+
+      routeRegionOrder = order;
+      buildStateGroupsFromRoute();
+      renderRouteResults();
+    }
+
+    // =========================
+    // ROUTE BUILD (OSRM)
     // =========================
     async function buildRoute() {
       if (!routeStart || !routeEnd) return;
@@ -1723,43 +1794,11 @@
       }
 
       const latlngs = coords.map(c => [c[1], c[0]]);
+      drawRoutePolyline(latlngs);
 
-      if (routeLine) map.removeLayer(routeLine);
-if (routeLineGlow) map.removeLayer(routeLineGlow);
+      analyzeRouteCoords(coords);
 
-routeLineGlow = L.polyline(latlngs, {
-  color: "#2D68C4",
-  weight: 10,
-  opacity: 0.25,
-  lineJoin: "round",
-  lineCap: "round"
-}).addTo(map);
-
-routeLine = L.polyline(latlngs, {
-  color: "#2D68C4",
-  weight: 6,
-  opacity: 1,
-  lineJoin: "round",
-  lineCap: "round"
-}).addTo(map);
-
-      map.fitBounds(routeLine.getBounds(), { padding: [20, 20] });
-
-      const sampled = sampleLineString(coords, ROUTE_SAMPLE_STEP_METERS);
-
-      const order = [];
-      let last = "";
-      for (const pt of sampled) {
-        const k = regionKeyForPoint(pt[0], pt[1]);
-        if (!k) continue;
-        if (k !== last) { order.push(k); last = k; }
-      }
-
-      routeRegionOrder = order;
-      buildStateGroupsFromRoute();
-      renderRouteResults();
-
-      setRouteStatus(`Start: ${fmtLL(routeStart)} | End: ${fmtLL(routeEnd)} | Regions crossed: ${routeRegionOrder.length}`);
+      setRouteStatus(`OSRM route | Start: ${fmtLL(routeStart)} | End: ${fmtLL(routeEnd)} | Regions crossed: ${routeRegionOrder.length}`);
     }
 
     function clearRoute() {
@@ -1775,6 +1814,7 @@ routeLine = L.polyline(latlngs, {
       if (routeStartMarker) { map.removeLayer(routeStartMarker); routeStartMarker = null; }
       if (routeEndMarker) { map.removeLayer(routeEndMarker); routeEndMarker = null; }
       if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
+      if (routeLineGlow) { map.removeLayer(routeLineGlow); routeLineGlow = null; }
 
       const resultsEl = document.getElementById("routeResults");
       resultsEl.style.display = "none";
@@ -1876,7 +1916,6 @@ routeLine = L.polyline(latlngs, {
                   const id = `${g.id}|${key}`;
                   const openC = routeCountyOpen.has(id);
 
-                  // show count of usable rows, not raw rows
                   const usableRows = rows.filter(r => rowHasAnyContent(r)).length;
 
                   return `
@@ -1938,6 +1977,57 @@ routeLine = L.polyline(latlngs, {
     }
 
     // =========================
+    // GPX IMPORT (for MapstoGPX output)
+    // =========================
+    function parseGpxToCoordsLngLat(gpxText) {
+      const xml = new DOMParser().parseFromString(gpxText, "application/xml");
+      const parserErr = xml.getElementsByTagName("parsererror");
+      if (parserErr && parserErr.length) return [];
+
+      // Prefer track points
+      const trkpts = Array.from(xml.getElementsByTagName("trkpt"));
+      let pts = trkpts;
+
+      // Fallback: route points
+      if (!pts.length) pts = Array.from(xml.getElementsByTagName("rtept"));
+
+      const coords = [];
+      for (const p of pts) {
+        const lat = parseFloat(p.getAttribute("lat"));
+        const lon = parseFloat(p.getAttribute("lon"));
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+        coords.push([lon, lat]);
+      }
+      return coords;
+    }
+
+    function setStartEndMarkersFromCoords(coords) {
+      if (!coords || coords.length < 2) return;
+
+      const first = coords[0];
+      const last = coords[coords.length - 1];
+
+      routeStart = L.latLng(first[1], first[0]);
+      routeEnd = L.latLng(last[1], last[0]);
+
+      if (routeStartMarker) map.removeLayer(routeStartMarker);
+      if (routeEndMarker) map.removeLayer(routeEndMarker);
+
+      routeStartMarker = L.marker(routeStart, { draggable: true }).addTo(map);
+      routeEndMarker = L.marker(routeEnd, { draggable: true }).addTo(map);
+
+      // Dragging imported markers: rebuild via OSRM (so user can tweak)
+      routeStartMarker.on("dragend", async () => {
+        routeStart = routeStartMarker.getLatLng();
+        if (routeStart && routeEnd) buildRoute();
+      });
+      routeEndMarker.on("dragend", async () => {
+        routeEnd = routeEndMarker.getLatLng();
+        if (routeStart && routeEnd) buildRoute();
+      });
+    }
+
+    // =========================
     // NOMINATIM AUTOCOMPLETE
     // =========================
     function pickSuggestion(which, lat, lng, label) {
@@ -1986,7 +2076,6 @@ routeLine = L.polyline(latlngs, {
       const arr = await res.json();
       if (!Array.isArray(arr)) return [];
 
-      // de-dupe by display_name to avoid duplicates
       const seen = new Set();
       const out = [];
 
@@ -2096,6 +2185,13 @@ routeLine = L.polyline(latlngs, {
     // =========================
     // ROUTE UI
     // =========================
+    function buildGoogleMapsDirUrl(originText, destText) {
+      const o = encodeURIComponent(String(originText || "").trim());
+      const d = encodeURIComponent(String(destText || "").trim());
+      if (!o || !d) return "";
+      return `https://www.google.com/maps/dir/?api=1&origin=${o}&destination=${d}&travelmode=driving`;
+    }
+
     function initRouteUI() {
       const fromEl = document.getElementById("fromInput");
       const toEl = document.getElementById("toInput");
@@ -2107,6 +2203,9 @@ routeLine = L.polyline(latlngs, {
       const swapBtn = document.getElementById("swapBtn");
       const buildBtn = document.getElementById("routeBuildBtn");
       const clearBtn = document.getElementById("routeClearBtn");
+
+      const openGmapsBtn = document.getElementById("openGmapsBtn");
+      const gpxFileEl = document.getElementById("gpxFile");
 
       locateBtn.addEventListener("click", () => {
         if (!navigator.geolocation) {
@@ -2121,12 +2220,10 @@ routeLine = L.polyline(latlngs, {
 
           const ll = L.latLng(lat, lng);
 
-          // player marker
           const icon = L.divIcon({ className: "", html: `<div class="player-icon"></div>`, iconSize: [22,22], iconAnchor: [11,11] });
           if (youMarker) map.removeLayer(youMarker);
           youMarker = L.marker(ll, { icon }).addTo(map);
 
-          // also sets FROM
           routeStart = ll;
           if (routeStartMarker) map.removeLayer(routeStartMarker);
           routeStartMarker = L.marker(routeStart, { draggable: true }).addTo(map);
@@ -2223,6 +2320,58 @@ routeLine = L.polyline(latlngs, {
       });
 
       clearBtn.addEventListener("click", () => clearRoute());
+
+      // New: open route in Google Maps
+      openGmapsBtn.addEventListener("click", async () => {
+        // If user hasn't selected suggestions yet, try to resolve once so the text is cleaner
+        if (!routeStart) {
+          const hit = await geocodeOne(fromEl.value);
+          if (hit) { routeStart = L.latLng(hit.lat, hit.lng); }
+        }
+        if (!routeEnd) {
+          const hit = await geocodeOne(toEl.value);
+          if (hit) { routeEnd = L.latLng(hit.lat, hit.lng); }
+        }
+
+        const url = buildGoogleMapsDirUrl(fromEl.value, toEl.value);
+        if (!url) { setRouteStatus("Set From and To first."); return; }
+        window.open(url, "_blank", "noopener,noreferrer");
+        setRouteStatus("Opened Google Maps. Copy the URL, paste it into mapstogpx.com, download GPX, then Import GPX here.");
+      });
+
+      // New: GPX import (for MapstoGPX output)
+      gpxFileEl.addEventListener("change", async () => {
+        const file = gpxFileEl.files && gpxFileEl.files[0];
+        if (!file) return;
+
+        setRouteStatus("Importing GPX…");
+
+        try {
+          const text = await file.text();
+          const coords = parseGpxToCoordsLngLat(text);
+          if (!coords || coords.length < 2) {
+            setRouteStatus("GPX import failed: no usable track/route points found.");
+            return;
+          }
+
+          // Draw + analyze
+          const latlngs = coords.map(c => [c[1], c[0]]);
+          drawRoutePolyline(latlngs);
+          analyzeRouteCoords(coords);
+
+          // Set start/end markers so OSRM Build still works after import
+          setStartEndMarkersFromCoords(coords);
+
+          setRouteStatus(`Imported GPX route | Start: ${fmtLL(routeStart)} | End: ${fmtLL(routeEnd)} | Regions crossed: ${routeRegionOrder.length}`);
+          setSidebarOpen(true);
+        } catch (e) {
+          console.error(e);
+          setRouteStatus("GPX import failed. Try exporting again from MapstoGPX.");
+        } finally {
+          // allow re-importing the same file without needing a different filename
+          gpxFileEl.value = "";
+        }
+      });
     }
 
     // =========================
