@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -14,6 +13,9 @@
 
   <!-- iOS home screen icon (iOS doesn't reliably use SVG here) -->
   <link rel="apple-touch-icon" href="./favicon.png">
+
+
+
 
   <link
           rel="stylesheet"
@@ -110,25 +112,26 @@
     .filter-btn[data-filter="de"]    { --btn-color:purple; --btn-tint:rgba(165,122,217,0.18); --btn-on-text:#111; }
 
     /* State + State Cam List: obvious toggle color (teal, non-conflicting) */
-    #stateModeBtn,
-    #stateCamRollupBtn{
-      --btn-color:#55C4BE;                 /* active fill */
-      --btn-tint:rgba(85,196,190,0.14);    /* inactive tint */
-      --btn-on-text:#111;                  /* keep text black */
-      border-width: 2px;                   /* makes it pop even when off */
-    }
+#stateModeBtn,
+#stateCamRollupBtn{
+  --btn-color:#55C4BE;                 /* active fill */
+  --btn-tint:rgba(85,196,190,0.14);    /* inactive tint */
+  --btn-on-text:#111;                  /* keep text black */
+  border-width: 2px;                   /* makes it pop even when off */
+}
 
-    /* Extra "on" emphasis */
-    #stateModeBtn.active,
-    #stateCamRollupBtn.active{
-      box-shadow: 0 0 0 3px rgba(85,196,190,0.30);
-    }
+/* Extra "on" emphasis */
+#stateModeBtn.active,
+#stateCamRollupBtn.active{
+  box-shadow: 0 0 0 3px rgba(85,196,190,0.30);
+}
 
-    /* Extra "off" emphasis */
-    #stateModeBtn:not(.active),
-    #stateCamRollupBtn:not(.active){
-      box-shadow: none;
-    }
+/* Extra "off" emphasis */
+#stateModeBtn:not(.active),
+#stateCamRollupBtn:not(.active){
+  box-shadow: none;
+}
+
 
     /* === Speed cam UI (smaller) === */
     .cam-controls {
@@ -585,10 +588,6 @@
           <a href="https://forms.fillout.com/t/dsffrfAc4jus" target="_blank" rel="noopener noreferrer">
             Have Data? Submit here
           </a>
-<!--          <a href="./route.html" target="_self" rel="noopener">-->
-<!--            Route Planner-->
-<!--          </a>-->
-
         </div>
       </div>
     </div>
@@ -598,29 +597,6 @@
         <input id="searchInput" class="search-input" placeholder="Search county / agency / state patrol / Canada province…" />
       </div>
       <div id="searchResults" class="search-results"></div>
-    </div>
-
-    <!-- ROUTE PANEL -->
-    <div class="panel" id="routePanel">
-      <h2>Route</h2>
-
-      <div style="display:flex; gap:8px; flex-wrap:wrap;">
-        <button class="filter-btn" id="routeSetStartBtn" type="button">
-          <div class="label">Set Start</div>
-        </button>
-        <button class="filter-btn" id="routeSetEndBtn" type="button">
-          <div class="label">Set End</div>
-        </button>
-        <button class="filter-btn" id="routeClearBtn" type="button">
-          <div class="label">Clear</div>
-        </button>
-      </div>
-
-      <div id="routeStatus" style="margin-top:10px; font-size:12.5px; color:#444; line-height:1.25;">
-        Click “Set Start”, click the map. Then “Set End”, click the map.
-      </div>
-
-      <div id="routeResults" style="margin-top:10px; display:none;"></div>
     </div>
 
     <div class="panel">
@@ -1048,390 +1024,6 @@
   let canadaLoaded = false;
 
   // =========================
-  // ROUTING (Point-to-Point) + "Threats along the way"
-  // =========================
-  const OSRM_ROUTE_URL = "https://router.project-osrm.org/route/v1/driving/";
-  const ROUTE_SAMPLE_STEP_METERS = 1200; // smaller = more accurate, larger = faster
-
-  let routePicking = null;            // "start" | "end" | null
-  let routeStart = null;              // L.LatLng
-  let routeEnd = null;                // L.LatLng
-  let routeStartMarker = null;
-  let routeEndMarker = null;
-  let routeLine = null;
-
-  let routeRegionOrder = [];          // ordered unique regions along route (keys like "13135" or "CA-35")
-  let countySpatialIndex = [];        // { key, bbox:[minLng,minLat,maxLng,maxLat], geom, props }
-  let canadaSpatialIndex = [];        // same, but only ~13 provinces
-
-  function setRouteStatus(msg) {
-    const el = document.getElementById("routeStatus");
-    if (el) el.textContent = msg;
-  }
-
-  function fmtLL(ll) {
-    if (!ll) return "not set";
-    return `${ll.lat.toFixed(5)}, ${ll.lng.toFixed(5)}`;
-  }
-
-  function clearRoute() {
-    routePicking = null;
-    routeStart = null;
-    routeEnd = null;
-    routeRegionOrder = [];
-
-    if (routeStartMarker) { map.removeLayer(routeStartMarker); routeStartMarker = null; }
-    if (routeEndMarker) { map.removeLayer(routeEndMarker); routeEndMarker = null; }
-    if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
-
-    const resultsEl = document.getElementById("routeResults");
-    if (resultsEl) {
-      resultsEl.style.display = "none";
-      resultsEl.innerHTML = "";
-    }
-
-    setRouteStatus("Click “Set Start”, click the map. Then “Set End”, click the map.");
-  }
-
-  function haversineMeters(lng1, lat1, lng2, lat2) {
-    const R = 6371000;
-    const toRad = d => d * Math.PI / 180;
-    const dLat = toRad(lat2 - lat1);
-    const dLng = toRad(lng2 - lng1);
-    const a =
-      Math.sin(dLat/2) * Math.sin(dLat/2) +
-      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
-      Math.sin(dLng/2) * Math.sin(dLng/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    return R * c;
-  }
-
-  function sampleLineString(coords, stepMeters) {
-    if (!coords || coords.length < 2) return coords || [];
-
-    const out = [];
-    let [prevLng, prevLat] = coords[0];
-    out.push([prevLng, prevLat]);
-
-    let carry = 0;
-
-    for (let i = 1; i < coords.length; i++) {
-      let [lng, lat] = coords[i];
-      let seg = haversineMeters(prevLng, prevLat, lng, lat);
-
-      if (!Number.isFinite(seg) || seg <= 0) {
-        prevLng = lng; prevLat = lat;
-        continue;
-      }
-
-      while (carry + seg >= stepMeters) {
-        const need = stepMeters - carry;
-        const t = need / seg;
-
-        const iLng = prevLng + (lng - prevLng) * t;
-        const iLat = prevLat + (lat - prevLat) * t;
-
-        out.push([iLng, iLat]);
-
-        prevLng = iLng; prevLat = iLat;
-        seg = haversineMeters(prevLng, prevLat, lng, lat);
-        carry = 0;
-
-        if (!Number.isFinite(seg) || seg <= 0) break;
-      }
-
-      carry += seg;
-      prevLng = lng; prevLat = lat;
-    }
-
-    const last = coords[coords.length - 1];
-    const lastOut = out[out.length - 1];
-    if (!lastOut || lastOut[0] !== last[0] || lastOut[1] !== last[1]) out.push(last);
-
-    return out;
-  }
-
-  function pointInRing(lng, lat, ring) {
-    let inside = false;
-    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-      const xi = ring[i][0], yi = ring[i][1];
-      const xj = ring[j][0], yj = ring[j][1];
-
-      const intersect =
-        ((yi > lat) !== (yj > lat)) &&
-        (lng < (xj - xi) * (lat - yi) / ((yj - yi) || 1e-12) + xi);
-
-      if (intersect) inside = !inside;
-    }
-    return inside;
-  }
-
-  function pointInPolygonGeom(lng, lat, geom) {
-    if (!geom) return false;
-
-    if (geom.type === "Polygon") {
-      const rings = geom.coordinates || [];
-      if (!rings.length) return false;
-
-      const outer = rings[0];
-      if (!pointInRing(lng, lat, outer)) return false;
-
-      for (let r = 1; r < rings.length; r++) {
-        if (pointInRing(lng, lat, rings[r])) return false;
-      }
-      return true;
-    }
-
-    if (geom.type === "MultiPolygon") {
-      const polys = geom.coordinates || [];
-      for (const poly of polys) {
-        if (!poly || !poly.length) continue;
-        const outer = poly[0];
-        if (!outer) continue;
-
-        if (!pointInRing(lng, lat, outer)) continue;
-
-        let inHole = false;
-        for (let r = 1; r < poly.length; r++) {
-          if (pointInRing(lng, lat, poly[r])) { inHole = true; break; }
-        }
-        if (!inHole) return true;
-      }
-      return false;
-    }
-
-    return false;
-  }
-
-  function bboxContains(b, lng, lat) {
-    return lng >= b[0] && lng <= b[2] && lat >= b[1] && lat <= b[3];
-  }
-
-  function regionKeyForPoint(lng, lat) {
-    for (const it of canadaSpatialIndex) {
-      if (!bboxContains(it.bbox, lng, lat)) continue;
-      if (pointInPolygonGeom(lng, lat, it.geom)) return it.key;
-    }
-    for (const it of countySpatialIndex) {
-      if (!bboxContains(it.bbox, lng, lat)) continue;
-      if (pointInPolygonGeom(lng, lat, it.geom)) return it.key;
-    }
-    return "";
-  }
-
-  function buildSpatialIndexes() {
-    countySpatialIndex = [];
-    canadaSpatialIndex = [];
-
-    if (usGeojsonCache && Array.isArray(usGeojsonCache.features)) {
-      for (const f of usGeojsonCache.features) {
-        const p = f.properties || {};
-        const key = normalizeUsGeoid(p.GEOID || p.geoid || p.GEOID10 || p.GEO_ID || "");
-        if (!key) continue;
-
-        const b = boundsFromGeometry(f.geometry);
-        if (!b) continue;
-
-        countySpatialIndex.push({
-          key,
-          bbox: [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()],
-          geom: f.geometry,
-          props: p
-        });
-      }
-    }
-
-    if (canadaProvincesCache && Array.isArray(canadaProvincesCache.features)) {
-      for (const f of canadaProvincesCache.features) {
-        const p = f.properties || {};
-        const key = regionKeyFromProps(p);
-        if (!key) continue;
-
-        const b = boundsFromGeometry(f.geometry);
-        if (!b) continue;
-
-        canadaSpatialIndex.push({
-          key,
-          bbox: [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()],
-          geom: f.geometry,
-          props: p
-        });
-      }
-    }
-  }
-
-  async function buildRoute() {
-    if (!routeStart || !routeEnd) return;
-
-    setRouteStatus("Building route…");
-
-    const s = routeStart;
-    const e = routeEnd;
-
-    const url =
-      `${OSRM_ROUTE_URL}${s.lng},${s.lat};${e.lng},${e.lat}` +
-      `?overview=full&geometries=geojson&alternatives=false&steps=false`;
-
-    let data;
-    try {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`OSRM route failed: ${res.status}`);
-      data = await res.json();
-    } catch (err) {
-      console.error(err);
-      setRouteStatus("Route fetch failed. Try again.");
-      return;
-    }
-
-    const coords = data?.routes?.[0]?.geometry?.coordinates;
-    if (!coords || coords.length < 2) {
-      setRouteStatus("No route found.");
-      return;
-    }
-
-    const latlngs = coords.map(c => [c[1], c[0]]);
-
-    if (routeLine) map.removeLayer(routeLine);
-    routeLine = L.polyline(latlngs, { weight: 5, opacity: 0.85 }).addTo(map);
-    map.fitBounds(routeLine.getBounds(), { padding: [20, 20] });
-
-    const sampled = sampleLineString(coords, ROUTE_SAMPLE_STEP_METERS);
-
-    const order = [];
-    let last = "";
-    for (const pt of sampled) {
-      const k = regionKeyForPoint(pt[0], pt[1]);
-      if (!k) continue;
-      if (k !== last) {
-        order.push(k);
-        last = k;
-      }
-    }
-
-    routeRegionOrder = order;
-    renderRouteResults();
-
-    setRouteStatus(
-      `Start: ${fmtLL(routeStart)} | End: ${fmtLL(routeEnd)} | Regions crossed: ${routeRegionOrder.length}`
-    );
-  }
-
-  function renderRouteResults() {
-    const resultsEl = document.getElementById("routeResults");
-    if (!resultsEl) return;
-
-    if (!routeRegionOrder.length) {
-      resultsEl.style.display = "none";
-      resultsEl.innerHTML = "";
-      return;
-    }
-
-    const allRouteRows = [];
-    for (const key of routeRegionOrder) {
-      const rows = rowsByGeoid.get(key) || [];
-      allRouteRows.push(...rows);
-    }
-
-    const matchCount = countMatchingRows(allRouteRows);
-    const regionCount = routeRegionOrder.length;
-
-    let html = `
-      <div style="font-size:12.5px; color:#333; margin-bottom:8px;">
-        <strong>Route summary:</strong> ${regionCount} region${regionCount === 1 ? "" : "s"} crossed, ${matchCount} matching record${matchCount === 1 ? "" : "s"} (current filters).
-      </div>
-    `;
-
-    html += `<div style="display:flex; flex-direction:column; gap:8px;">`;
-
-    for (const key of routeRegionOrder) {
-      const props = regionPropsByKey.get(key) || null;
-      const name = props ? getRegionDisplayNameFromProps(props) : key;
-      const tag = props ? getRegionTagFromProps(props) : (key.startsWith("CA-") ? "CANADA" : "");
-      const rows = rowsByGeoid.get(key) || [];
-      const m = countMatchingRows(rows);
-
-      html += `
-        <button type="button" class="search-item" data-routekey="${escapeAttr(key)}">
-          <div class="top">${escapeHtml(tag ? `${name}, ${tag}` : name)}</div>
-          <div class="sub">${m} matching record${m === 1 ? "" : "s"} (current filters)</div>
-        </button>
-      `;
-    }
-
-    html += `</div>`;
-
-    const camRollup = speedCamerasHtmlCombined(allRouteRows);
-    if (camRollup) html += `<div style="margin-top:10px;">${camRollup}</div>`;
-
-    resultsEl.innerHTML = html;
-    resultsEl.style.display = "block";
-
-    resultsEl.querySelectorAll("button[data-routekey]").forEach(btn => {
-      btn.addEventListener("click", async () => {
-        const key = btn.getAttribute("data-routekey");
-        const props = regionPropsByKey.get(key);
-        const b = regionBoundsByKey.get(key);
-
-        setStateMode(false);
-
-        if (b) map.fitBounds(b, { padding: [20, 20] });
-        if (props) renderRegionInfo(props);
-      });
-    });
-  }
-
-  function initRouteUI() {
-    const startBtn = document.getElementById("routeSetStartBtn");
-    const endBtn = document.getElementById("routeSetEndBtn");
-    const clearBtn = document.getElementById("routeClearBtn");
-
-    startBtn.addEventListener("click", () => {
-      routePicking = "start";
-      setRouteStatus("Click the map to set START.");
-    });
-
-    endBtn.addEventListener("click", () => {
-      routePicking = "end";
-      setRouteStatus("Click the map to set END.");
-    });
-
-    clearBtn.addEventListener("click", () => clearRoute());
-
-    map.on("click", async (e) => {
-      if (!routePicking) return;
-
-      if (routePicking === "start") {
-        routeStart = e.latlng;
-        if (routeStartMarker) map.removeLayer(routeStartMarker);
-        routeStartMarker = L.marker(routeStart, { draggable: true }).addTo(map);
-        routeStartMarker.on("dragend", () => {
-          routeStart = routeStartMarker.getLatLng();
-          if (routeStart && routeEnd) buildRoute();
-          else setRouteStatus(`Start: ${fmtLL(routeStart)} | End: ${fmtLL(routeEnd)}`);
-        });
-
-        routePicking = null;
-        setRouteStatus(`Start set: ${fmtLL(routeStart)}. Now set END.`);
-      }
-      else if (routePicking === "end") {
-        routeEnd = e.latlng;
-        if (routeEndMarker) map.removeLayer(routeEndMarker);
-        routeEndMarker = L.marker(routeEnd, { draggable: true }).addTo(map);
-        routeEndMarker.on("dragend", () => {
-          routeEnd = routeEndMarker.getLatLng();
-          if (routeStart && routeEnd) buildRoute();
-          else setRouteStatus(`Start: ${fmtLL(routeStart)} | End: ${fmtLL(routeEnd)}`);
-        });
-
-        routePicking = null;
-        setRouteStatus(`End set: ${fmtLL(routeEnd)}. Building route…`);
-
-        if (routeStart && routeEnd) await buildRoute();
-      }
-    });
-  }
-
-  // =========================
   // HELPERS
   // =========================
   function setStatus(msg) {
@@ -1624,6 +1216,7 @@
     const s = String(line || "").trim();
     if (!s) return null;
 
+    // Label | URL
     let m = s.match(/^(.+?)\s*\|\s*(\S+)\s*$/);
     if (m) {
       const url = normalizeUrl_(m[2]);
@@ -1631,6 +1224,7 @@
       return { label: m[1].trim(), url };
     }
 
+    // Markdown [Label](URL)
     m = s.match(/^\[([^\]]+?)\]\(([^)]+)\)\s*$/);
     if (m) {
       const url = normalizeUrl_(m[2]);
@@ -1638,6 +1232,7 @@
       return { label: m[1].trim(), url };
     }
 
+    // URL only
     m = s.match(/^(\S+)$/);
     if (m) {
       const url = normalizeUrl_(m[1]);
@@ -1645,6 +1240,7 @@
       return { label: hostFromUrl_(url) || "Link", url };
     }
 
+    // Label + URL at end
     m = s.match(/^(.*?)(https?:\/\/\S+|www\.\S+)\s*$/i);
     if (m) {
       const url = normalizeUrl_(m[2]);
@@ -1777,6 +1373,7 @@
   function getAllRowsForStateSpeedCams(ab) {
     const out = [];
 
+    // 1) all county entries inside the state (COUNTY sheet)
     const keys = regionKeysByState.get(ab);
     if (keys) {
       for (const geoid of keys) {
@@ -1785,6 +1382,7 @@
       }
     }
 
+    // 2) state-level entries (STATE AGENCY sheet)
     const stateRows = rowsByState.get(ab);
     if (stateRows && stateRows.length) out.push(...stateRows);
 
@@ -2100,6 +1698,7 @@
       recordsEl.appendChild(div);
     });
 
+    // County/province mode: combined cam section at bottom (dims based on cam filters)
     const camSection = speedCamerasHtmlCombined(allRows);
     if (camSection) {
       const wrap = document.createElement("div");
@@ -2218,6 +1817,7 @@
     }
     if (matches.length === 0) return s;
 
+    // If matches are ONLY speed cameras, force cam color (muted green)
     const hasBandMatch = matches.some(isBandFilter);
     const hasCamMatch  = matches.some(isCamFilter);
     if (hasCamMatch && !hasBandMatch) {
@@ -2305,6 +1905,7 @@
       return s;
     }
 
+    // Cam-only selection stays cam color even if multiple cam types match
     const hasBandMatch = matches.some(isBandFilter);
     const hasCamMatch  = matches.some(isCamFilter);
     if (hasCamMatch && !hasBandMatch) {
@@ -2395,6 +1996,7 @@
       return s;
     }
 
+    // Cam-only selection stays cam color even if multiple cam types match
     const hasBandMatch = matches.some(isBandFilter);
     const hasCamMatch  = matches.some(isCamFilter);
     if (hasCamMatch && !hasBandMatch) {
@@ -2466,7 +2068,6 @@
 
     vgLayer.on("click", (e) => {
       if (stateMode) return;
-      if (routePicking) return;
 
       const props =
         (e && e.layer && e.layer.properties) ? e.layer.properties :
@@ -2516,7 +2117,6 @@
       onEachFeature: (feature, layer) => {
         layer.on("click", (e) => {
           if (!stateMode) return;
-          if (routePicking) return;
 
           const p = (feature && feature.properties) ? feature.properties : {};
           const ab = getStateAbbrevFromProps(p);
@@ -2616,7 +2216,6 @@
       onEachFeature: (feature, layer) => {
         layer.on("click", (e) => {
           if (stateMode) return;
-          if (routePicking) return;
 
           const p = (feature && feature.properties) ? feature.properties : {};
           lastClickedProps = p;
@@ -2651,6 +2250,7 @@
     stateNameEl.textContent = `${fullName} (${stateAbbrev})`;
     stateRecordsEl.innerHTML = "";
 
+    // If State Cam List is ON: show ONLY speed cams (no agencies)
     if (stateCamRollup) {
       stateTitleEl.textContent = "Speed Cameras";
 
@@ -2669,6 +2269,7 @@
       return;
     }
 
+    // Normal state mode: agencies/records + state speed cams combined at bottom
     stateTitleEl.textContent = "State Agencies / Records";
 
     const rows = rowsByState.get(stateAbbrev) || [];
@@ -2725,6 +2326,7 @@
       stateRecordsEl.appendChild(div);
     });
 
+    // show state-sheet speed cameras (combined) at the bottom in normal state mode
     const stateCamSection = speedCamerasHtmlCombined(rows);
     if (stateCamSection) {
       const wrap = document.createElement("div");
@@ -2741,6 +2343,7 @@
   function setStateMode(on, opts = {}) {
     stateMode = !!on;
 
+    // leaving state mode -> force rollup OFF (state-only feature)
     if (!stateMode) stateCamRollup = false;
 
     if (statesLayer) {
@@ -2753,6 +2356,7 @@
       });
     }
 
+    // Canada provinces: clickable only in county mode
     if (canadaLayer) {
       canadaLayer.eachLayer(layer => {
         layer.options.interactive = !stateMode;
@@ -3069,17 +2673,17 @@
       setStateMode(!stateMode);
       renderAllFilterButtons();
       refreshCanadaStyle();
-      if (routeRegionOrder.length) renderRouteResults();
     });
 
+    // State cam rollup toggle
     document.getElementById("stateCamRollupBtn").addEventListener("click", () => {
       if (!stateMode) return;
       stateCamRollup = !stateCamRollup;
       renderAllFilterButtons();
       if (lastClickedStateAbbrev) renderStateInfo(lastClickedStateAbbrev);
-      if (routeRegionOrder.length) renderRouteResults();
     });
 
+    // Band filter buttons
     document.querySelectorAll(".filter-btn[data-filter]").forEach(btn => {
       btn.addEventListener("click", async () => {
         if (kaFreqMode) return;
@@ -3108,11 +2712,10 @@
           refreshStatesStyle();
           if (lastClickedStateAbbrev) renderStateInfo(lastClickedStateAbbrev);
         }
-
-        if (routeRegionOrder.length) renderRouteResults();
       });
     });
 
+    // Cam filter buttons
     document.querySelectorAll(".cam-btn[data-cam]").forEach(btn => {
       btn.addEventListener("click", async () => {
         const f = btn.getAttribute("data-cam");
@@ -3139,11 +2742,10 @@
           refreshStatesStyle();
           if (lastClickedStateAbbrev) renderStateInfo(lastClickedStateAbbrev);
         }
-
-        if (routeRegionOrder.length) renderRouteResults();
       });
     });
 
+    // Ka freq dropdown
     document.getElementById("kaArrowBtn").addEventListener("click", (e) => {
       e.stopPropagation();
       setKaDropdown(!isKaDropdownOpen());
@@ -3178,8 +2780,6 @@
           refreshStatesStyle();
           if (lastClickedStateAbbrev) renderStateInfo(lastClickedStateAbbrev);
         }
-
-        if (routeRegionOrder.length) renderRouteResults();
       });
     });
 
@@ -3239,9 +2839,6 @@
       indexStatesGeojson();
 
       if (canadaProvincesCache) await addCanadaLayer();
-
-      buildSpatialIndexes();
-      initRouteUI();
 
       setTimeout(() => map.invalidateSize(), 0);
       window.addEventListener("resize", () => map.invalidateSize());
