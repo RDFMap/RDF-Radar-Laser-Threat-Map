@@ -420,7 +420,7 @@
           transform: translate(-50%,-50%);
         }
 
-        /* New: “More accurate route” helper */
+        /* “More accurate route” helper */
         .helper-box{
           margin-top:10px;
           padding: 10px;
@@ -497,7 +497,6 @@
                     <button class="btn" id="routeBuildBtn" type="button">Build</button>
                     <button class="btn" id="routeClearBtn" type="button">Clear</button>
 
-                    <!-- New: Google-route helper buttons (OSRM stays default) -->
                     <button class="btn" id="openGmapsBtn" type="button" title="Open this route in Google Maps in a new tab">
                         Open Google Maps
                     </button>
@@ -512,16 +511,16 @@
                     Type From/To (use suggestions), then Build. Locate sets From automatically.
                 </div>
 
-                <!-- New: instructions + MapstoGPX link -->
                 <div class="helper-box" id="moreAccurateBox">
-                    <strong>Want a more accurate route than OSRM?</strong><br>
-                    OSRM is solid for geometry, but it’s OpenStreetMap-based and not traffic-aware. If you want something closer to the route Google would actually send you on right now, use Google Maps + MapstoGPX and import the GPX here.
+                    <strong>About routing quality</strong><br>
+                    This page uses <strong>Valhalla</strong> (OpenStreetMap-based). It’s strong routing, but it’s not live-traffic-aware.
+                    If you want something closer to “what Google/Waze would send right now”, use Google Maps + MapstoGPX and import the GPX here.
                     <div class="helper-steps">
                         <div><strong>1)</strong> Click <strong>Open Google Maps</strong> above.</div>
-                        <div><strong>2)</strong> In Google Maps, make sure the route looks right (tolls / avoid highways / whatever).</div>
-                        <div><strong>3)</strong> Copy the Google Maps directions URL from your browser/mobile app (copy link / share link button).</div>
-                        <div><strong>4)</strong> Open <a href="https://mapstogpx.com" target="_blank" rel="noopener noreferrer">mapstogpx.com</a>, paste the URL, and download the GPX.</div>
-                        <div><strong>5)</strong> Click <strong>Import GPX</strong> here and select the GPX file. This will draw that route and run the same route analysis.</div>
+                        <div><strong>2)</strong> Make the route look how you want (tolls / avoid highways / etc.).</div>
+                        <div><strong>3)</strong> Copy the Google Maps directions URL.</div>
+                        <div><strong>4)</strong> Open <a href="https://mapstogpx.com" target="_blank" rel="noopener noreferrer">mapstogpx.com</a>, paste the URL, download the GPX.</div>
+                        <div><strong>5)</strong> Click <strong>Import GPX</strong> here. Same route analysis, but with Google’s chosen path.</div>
                     </div>
                 </div>
 
@@ -556,9 +555,12 @@
     const DEFAULT_CENTER = [39.5, -98.35];
     const DEFAULT_ZOOM = 4;
 
-    // Routing
-    const OSRM_ROUTE_URL = "https://router.project-osrm.org/route/v1/driving/";
+    // Routing (Valhalla)
+    const VALHALLA_ROUTE_URL = "https://valhalla1.openstreetmap.de/route"; // public instance
     const ROUTE_SAMPLE_STEP_METERS = 1200;
+
+    // Optional fallback (kept as backup)
+    const OSRM_ROUTE_URL = "https://router.project-osrm.org/route/v1/driving/";
 
     // Nominatim (OSM) autocomplete + geocode (restrict to US/CA)
     const NOMINATIM_COUNTRYCODES = "us,ca";
@@ -708,6 +710,17 @@
         }
       }
       return "";
+    }
+
+    function fmtDuration(seconds) {
+      const s = Number(seconds);
+      if (!Number.isFinite(s) || s < 0) return "N/A";
+      let m = Math.round(s / 60);
+      let h = Math.floor(m / 60);
+      m = m % 60;
+      if (h <= 0) return `${m} min`;
+      if (m === 0) return `${h}h`;
+      return `${h}h ${m}m`;
     }
 
     // Notes links formatting
@@ -1378,7 +1391,7 @@
     }
 
     // =========================
-    // ROUTE MATH
+    // ROUTE MATH + POLYLINE6 DECODER
     // =========================
     function haversineMeters(lng1, lat1, lng2, lat2) {
       const R = 6371000;
@@ -1391,6 +1404,50 @@
         Math.sin(dLng/2) * Math.sin(dLng/2);
       const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
       return R * c;
+    }
+
+    function routeMetersFromCoords(coordsLngLat) {
+      if (!coordsLngLat || coordsLngLat.length < 2) return 0;
+      let sum = 0;
+      for (let i = 1; i < coordsLngLat.length; i++) {
+        const a = coordsLngLat[i-1], b = coordsLngLat[i];
+        sum += haversineMeters(a[0], a[1], b[0], b[1]);
+      }
+      return sum;
+    }
+
+    function metersToMiles(m) { return m / 1609.344; }
+
+    // Valhalla/OSRM polyline decode with precision (Valhalla uses 6)
+    function decodePolyline(str, precision) {
+      let index = 0, lat = 0, lng = 0;
+      const coordinates = [];
+      const factor = Math.pow(10, precision || 6);
+
+      while (index < str.length) {
+        let byte = null, shift = 0, result = 0;
+        do {
+          byte = str.charCodeAt(index++) - 63;
+          result |= (byte & 0x1f) << shift;
+          shift += 5;
+        } while (byte >= 0x20);
+        const latitude_change = ((result & 1) ? ~(result >> 1) : (result >> 1));
+
+        shift = 0;
+        result = 0;
+        do {
+          byte = str.charCodeAt(index++) - 63;
+          result |= (byte & 0x1f) << shift;
+          shift += 5;
+        } while (byte >= 0x20);
+        const longitude_change = ((result & 1) ? ~(result >> 1) : (result >> 1));
+
+        lat += latitude_change;
+        lng += longitude_change;
+
+        coordinates.push([lat / factor, lng / factor]); // [lat, lng]
+      }
+      return coordinates;
     }
 
     function sampleLineString(coords, stepMeters) {
@@ -1486,7 +1543,7 @@
           });
           order.push(gid);
 
-          if (!routeStateOpen.has(gid)) routeStateOpen.set(gid, false);
+          if (!routeStateOpen.has(gid)) routeStateOpen.set(gid, false); // default collapsed
         }
 
         const g = groups.get(gid);
@@ -1720,7 +1777,7 @@
     }
 
     // =========================
-    // ROUTE DRAW + ANALYZE (shared by OSRM + GPX import)
+    // ROUTE DRAW + ANALYZE (shared by Valhalla + OSRM fallback + GPX)
     // =========================
     function drawRoutePolyline(latlngs) {
       if (routeLine) map.removeLayer(routeLine);
@@ -1728,8 +1785,8 @@
 
       routeLineGlow = L.polyline(latlngs, {
         color: "#2D68C4",
-        weight: 10,
-        opacity: 0.25,
+        weight: 12,
+        opacity: 0.28,
         lineJoin: "round",
         lineCap: "round"
       }).addTo(map);
@@ -1762,43 +1819,135 @@
     }
 
     // =========================
-    // ROUTE BUILD (OSRM)
+    // ROUTE BUILD (VALHALLA)
     // =========================
-    async function buildRoute() {
+    async function buildRouteValhalla() {
       if (!routeStart || !routeEnd) return;
 
-      setRouteStatus("Building route…");
+      setRouteStatus("Building route (Valhalla)…");
 
-      const s = routeStart;
-      const e = routeEnd;
+      const payload = {
+        locations: [
+          { lat: routeStart.lat, lon: routeStart.lng, type: "break" },
+          { lat: routeEnd.lat,   lon: routeEnd.lng,   type: "break" }
+        ],
+        costing: "auto",
+        units: "miles"
+      };
 
-      const url =
-        `${OSRM_ROUTE_URL}${s.lng},${s.lat};${e.lng},${e.lat}` +
-        `?overview=full&geometries=geojson&alternatives=false&steps=false`;
+      const url = `${VALHALLA_ROUTE_URL}?json=${encodeURIComponent(JSON.stringify(payload))}`;
 
       let data;
       try {
         const res = await fetch(url);
-        if (!res.ok) throw new Error(`OSRM route failed: ${res.status}`);
+        if (!res.ok) throw new Error(`Valhalla route failed: ${res.status}`);
         data = await res.json();
       } catch (err) {
         console.error(err);
-        setRouteStatus("Route fetch failed. Try again.");
+        return { ok: false, reason: "Valhalla fetch failed" };
+      }
+
+      const trip = data?.trip;
+      if (!trip || trip.status !== 0) {
+        console.warn("Valhalla status:", trip?.status, trip?.status_message);
+        return { ok: false, reason: trip?.status_message || "No route found" };
+      }
+
+      const legs = Array.isArray(trip.legs) ? trip.legs : [];
+      if (!legs.length) return { ok: false, reason: "No legs returned" };
+
+      // decode polyline6 shapes per leg, stitch
+      let latlngs = [];
+      for (const leg of legs) {
+        const shape = String(leg?.shape || "");
+        if (!shape) continue;
+        const pts = decodePolyline(shape, 6); // [lat,lng]
+        if (!pts.length) continue;
+
+        if (latlngs.length) {
+          const last = latlngs[latlngs.length - 1];
+          const first = pts[0];
+          if (last && first && last[0] === first[0] && last[1] === first[1]) {
+            latlngs.push(...pts.slice(1));
+          } else {
+            latlngs.push(...pts);
+          }
+        } else {
+          latlngs = pts.slice();
+        }
+      }
+
+      if (latlngs.length < 2) return { ok: false, reason: "No usable shape" };
+
+      // for your analyzer, we want [lng,lat]
+      const coordsLngLat = latlngs.map(p => [p[1], p[0]]);
+
+      drawRoutePolyline(latlngs.map(p => [p[0], p[1]]));
+      analyzeRouteCoords(coordsLngLat);
+
+      const miles = Number(trip?.summary?.length);
+      const seconds = Number(trip?.summary?.time);
+
+      return {
+        ok: true,
+        miles: Number.isFinite(miles) ? miles : null,
+        seconds: Number.isFinite(seconds) ? seconds : null
+      };
+    }
+
+    // Optional backup: OSRM if Valhalla is down / blocked
+    async function buildRouteOsrmFallback() {
+      const s = routeStart, e = routeEnd;
+      const url =
+        `${OSRM_ROUTE_URL}${s.lng},${s.lat};${e.lng},${e.lat}` +
+        `?overview=full&geometries=geojson&alternatives=false&steps=false`;
+
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`OSRM route failed: ${res.status}`);
+        const data = await res.json();
+        const coords = data?.routes?.[0]?.geometry?.coordinates;
+        if (!coords || coords.length < 2) return { ok: false, reason: "No route found" };
+
+        const latlngs = coords.map(c => [c[1], c[0]]);
+        drawRoutePolyline(latlngs);
+        analyzeRouteCoords(coords);
+
+        const meters = Number(data?.routes?.[0]?.distance);
+        const seconds = Number(data?.routes?.[0]?.duration);
+
+        return {
+          ok: true,
+          miles: Number.isFinite(meters) ? metersToMiles(meters) : null,
+          seconds: Number.isFinite(seconds) ? seconds : null
+        };
+      } catch (e) {
+        console.error(e);
+        return { ok: false, reason: "OSRM failed" };
+      }
+    }
+
+    async function buildRoute() {
+      if (!routeStart || !routeEnd) return;
+
+      const r = await buildRouteValhalla();
+
+      if (!r.ok) {
+        setRouteStatus(`Valhalla failed (${r.reason}). Trying OSRM fallback…`);
+        const r2 = await buildRouteOsrmFallback();
+        if (!r2.ok) {
+          setRouteStatus("Route fetch failed. Try again.");
+          return;
+        }
+        const dist = (r2.miles != null) ? `${r2.miles.toFixed(1)} mi` : "Distance N/A";
+        const eta = (r2.seconds != null) ? `ETA ${fmtDuration(r2.seconds)}` : "ETA N/A";
+        setRouteStatus(`OSRM route | ${dist} | ${eta} | Regions crossed: ${routeRegionOrder.length}`);
         return;
       }
 
-      const coords = data?.routes?.[0]?.geometry?.coordinates;
-      if (!coords || coords.length < 2) {
-        setRouteStatus("No route found.");
-        return;
-      }
-
-      const latlngs = coords.map(c => [c[1], c[0]]);
-      drawRoutePolyline(latlngs);
-
-      analyzeRouteCoords(coords);
-
-      setRouteStatus(`OSRM route | Start: ${fmtLL(routeStart)} | End: ${fmtLL(routeEnd)} | Regions crossed: ${routeRegionOrder.length}`);
+      const dist = (r.miles != null) ? `${r.miles.toFixed(1)} mi` : "Distance N/A";
+      const eta = (r.seconds != null) ? `ETA ${fmtDuration(r.seconds)}` : "ETA N/A";
+      setRouteStatus(`Valhalla route | ${dist} | ${eta} | Regions crossed: ${routeRegionOrder.length}`);
     }
 
     function clearRoute() {
@@ -1984,11 +2133,9 @@
       const parserErr = xml.getElementsByTagName("parsererror");
       if (parserErr && parserErr.length) return [];
 
-      // Prefer track points
       const trkpts = Array.from(xml.getElementsByTagName("trkpt"));
       let pts = trkpts;
 
-      // Fallback: route points
       if (!pts.length) pts = Array.from(xml.getElementsByTagName("rtept"));
 
       const coords = [];
@@ -2016,13 +2163,16 @@
       routeStartMarker = L.marker(routeStart, { draggable: true }).addTo(map);
       routeEndMarker = L.marker(routeEnd, { draggable: true }).addTo(map);
 
-      // Dragging imported markers: rebuild via OSRM (so user can tweak)
       routeStartMarker.on("dragend", async () => {
         routeStart = routeStartMarker.getLatLng();
+        const addr = await reverseGeocode(routeStart.lat, routeStart.lng);
+        if (addr) document.getElementById("fromInput").value = addr;
         if (routeStart && routeEnd) buildRoute();
       });
       routeEndMarker.on("dragend", async () => {
         routeEnd = routeEndMarker.getLatLng();
+        const addr = await reverseGeocode(routeEnd.lat, routeEnd.lng);
+        if (addr) document.getElementById("toInput").value = addr;
         if (routeStart && routeEnd) buildRoute();
       });
     }
@@ -2321,9 +2471,7 @@
 
       clearBtn.addEventListener("click", () => clearRoute());
 
-      // New: open route in Google Maps
       openGmapsBtn.addEventListener("click", async () => {
-        // If user hasn't selected suggestions yet, try to resolve once so the text is cleaner
         if (!routeStart) {
           const hit = await geocodeOne(fromEl.value);
           if (hit) { routeStart = L.latLng(hit.lat, hit.lng); }
@@ -2339,7 +2487,6 @@
         setRouteStatus("Opened Google Maps. Copy the URL, paste it into mapstogpx.com, download GPX, then Import GPX here.");
       });
 
-      // New: GPX import (for MapstoGPX output)
       gpxFileEl.addEventListener("change", async () => {
         const file = gpxFileEl.files && gpxFileEl.files[0];
         if (!file) return;
@@ -2354,21 +2501,19 @@
             return;
           }
 
-          // Draw + analyze
           const latlngs = coords.map(c => [c[1], c[0]]);
           drawRoutePolyline(latlngs);
           analyzeRouteCoords(coords);
 
-          // Set start/end markers so OSRM Build still works after import
           setStartEndMarkersFromCoords(coords);
 
-          setRouteStatus(`Imported GPX route | Start: ${fmtLL(routeStart)} | End: ${fmtLL(routeEnd)} | Regions crossed: ${routeRegionOrder.length}`);
+          const miles = metersToMiles(routeMetersFromCoords(coords));
+          setRouteStatus(`Imported GPX route | ${miles.toFixed(1)} mi | Regions crossed: ${routeRegionOrder.length}`);
           setSidebarOpen(true);
         } catch (e) {
           console.error(e);
           setRouteStatus("GPX import failed. Try exporting again from MapstoGPX.");
         } finally {
-          // allow re-importing the same file without needing a different filename
           gpxFileEl.value = "";
         }
       });
