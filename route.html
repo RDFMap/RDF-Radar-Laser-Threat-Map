@@ -419,22 +419,6 @@
           top: 50%;
           transform: translate(-50%,-50%);
         }
-
-        /* “More accurate route” helper */
-        .helper-box{
-          margin-top:10px;
-          padding: 10px;
-          border: 1px solid #eee;
-          border-radius: 12px;
-          background: #fff;
-          font-size: 12.5px;
-          color:#333;
-          line-height: 1.25;
-        }
-        .helper-box strong{ font-weight: 950; }
-        .helper-box a{ text-decoration: underline; font-weight: 850; }
-        .helper-steps{ margin-top: 8px; }
-        .helper-steps div{ margin-top: 4px; }
     </style>
 </head>
 
@@ -496,32 +480,10 @@
                 <div class="route-actions">
                     <button class="btn" id="routeBuildBtn" type="button">Build</button>
                     <button class="btn" id="routeClearBtn" type="button">Clear</button>
-
-                    <button class="btn" id="openGmapsBtn" type="button" title="Open this route in Google Maps in a new tab">
-                        Open Google Maps
-                    </button>
-
-                    <label class="btn" style="cursor:pointer;" title="Import a GPX track (ex: from MapstoGPX)">
-                        Import GPX
-                        <input id="gpxFile" type="file" accept=".gpx,application/gpx+xml" style="display:none;">
-                    </label>
                 </div>
 
                 <div id="routeStatus" style="margin-top:10px; font-size:12.5px; color:#444; line-height:1.25;">
                     Type From/To (use suggestions), then Build. Locate sets From automatically.
-                </div>
-
-                <div class="helper-box" id="moreAccurateBox">
-                    <strong>About routing quality</strong><br>
-                    This page uses <strong>Valhalla</strong> (OpenStreetMap-based). It’s strong routing, but it’s not live-traffic-aware.
-                    If you want something closer to “what Google/Waze would send right now”, use Google Maps + MapstoGPX and import the GPX here.
-                    <div class="helper-steps">
-                        <div><strong>1)</strong> Click <strong>Open Google Maps</strong> above.</div>
-                        <div><strong>2)</strong> Make the route look how you want (tolls / avoid highways / etc.).</div>
-                        <div><strong>3)</strong> Copy the Google Maps directions URL.</div>
-                        <div><strong>4)</strong> Open <a href="https://mapstogpx.com" target="_blank" rel="noopener noreferrer">mapstogpx.com</a>, paste the URL, download the GPX.</div>
-                        <div><strong>5)</strong> Click <strong>Import GPX</strong> here. Same route analysis, but with Google’s chosen path.</div>
-                    </div>
                 </div>
 
                 <div id="routeResults" style="margin-top:10px; display:none;"></div>
@@ -558,6 +520,12 @@
     // Routing (Valhalla)
     const VALHALLA_ROUTE_URL = "https://valhalla1.openstreetmap.de/route"; // public instance
     const ROUTE_SAMPLE_STEP_METERS = 1200;
+
+    // Chunking / pacing / retries (prevents instant OSRM fallback)
+    const ROUTE_MAX_SEGMENT_MILES = 700;     // split long routes into ~700mi chunks
+    const VALHALLA_MIN_DELAY_MS = 1150;      // ~1 request/sec pacing
+    const VALHALLA_RETRIES = 2;              // retries per segment
+    const VALHALLA_TIMEOUT_MS = 20000;       // per request timeout (lets long routes take time)
 
     // Optional fallback (kept as backup)
     const OSRM_ROUTE_URL = "https://router.project-osrm.org/route/v1/driving/";
@@ -989,6 +957,9 @@
     let routeStateGroups = [];
     const routeStateOpen = new Map();
     const routeCountyOpen = new Set();
+
+    // Prevent instant fallback while Valhalla routing is in-progress
+    let routingJobId = 0;
 
     // =========================
     // GEOJSON BOUNDS + SPATIAL LOOKUP
@@ -1489,6 +1460,62 @@
       return `${ll.lat.toFixed(5)}, ${ll.lng.toFixed(5)}`;
     }
 
+    function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+    function toRad(d) { return d * Math.PI / 180; }
+    function toDeg(r) { return r * 180 / Math.PI; }
+
+    function haversineMilesLL(a, b) {
+      return metersToMiles(haversineMeters(a.lng, a.lat, b.lng, b.lat));
+    }
+
+    // Great-circle interpolation for segment split points (more stable than linear lat/lng)
+    function greatCircleInterpolate(a, b, f) {
+      const φ1 = toRad(a.lat), λ1 = toRad(a.lng);
+      const φ2 = toRad(b.lat), λ2 = toRad(b.lng);
+
+      const sinΔφ = Math.sin((φ2 - φ1) / 2);
+      const sinΔλ = Math.sin((λ2 - λ1) / 2);
+      const h = sinΔφ * sinΔφ + Math.cos(φ1) * Math.cos(φ2) * sinΔλ * sinΔλ;
+
+      const δ = 2 * Math.asin(Math.min(1, Math.sqrt(Math.max(0, h))));
+      if (!Number.isFinite(δ) || δ === 0) return L.latLng(a.lat, a.lng);
+
+      const A = Math.sin((1 - f) * δ) / Math.sin(δ);
+      const B = Math.sin(f * δ) / Math.sin(δ);
+
+      const x = A * Math.cos(φ1) * Math.cos(λ1) + B * Math.cos(φ2) * Math.cos(λ2);
+      const y = A * Math.cos(φ1) * Math.sin(λ1) + B * Math.cos(φ2) * Math.sin(λ2);
+      const z = A * Math.sin(φ1) + B * Math.sin(φ2);
+
+      const φi = Math.atan2(z, Math.sqrt(x * x + y * y));
+      const λi = Math.atan2(y, x);
+
+      return L.latLng(toDeg(φi), toDeg(λi));
+    }
+
+    function buildSegmentPoints(startLL, endLL, maxSegMiles) {
+      const total = haversineMilesLL(startLL, endLL);
+      const segs = Math.max(1, Math.ceil(total / maxSegMiles));
+
+      const pts = [startLL];
+      for (let i = 1; i < segs; i++) {
+        pts.push(greatCircleInterpolate(startLL, endLL, i / segs));
+      }
+      pts.push(endLL);
+      return pts;
+    }
+
+    async function fetchWithTimeout(url, timeoutMs) {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), timeoutMs);
+      try {
+        const res = await fetch(url, { signal: ctrl.signal, headers: { "Accept": "application/json" } });
+        return res;
+      } finally {
+        clearTimeout(t);
+      }
+    }
+
     // =========================
     // ROUTE GROUPING (US states + CA provinces)
     // =========================
@@ -1777,7 +1804,7 @@
     }
 
     // =========================
-    // ROUTE DRAW + ANALYZE (shared by Valhalla + OSRM fallback + GPX)
+    // ROUTE DRAW + ANALYZE
     // =========================
     function drawRoutePolyline(latlngs) {
       if (routeLine) map.removeLayer(routeLine);
@@ -1819,17 +1846,13 @@
     }
 
     // =========================
-    // ROUTE BUILD (VALHALLA)
+    // ROUTE BUILD (VALHALLA) - CHUNKED + RETRIES + PACING
     // =========================
-    async function buildRouteValhalla() {
-      if (!routeStart || !routeEnd) return;
-
-      setRouteStatus("Building route (Valhalla)…");
-
+    async function fetchValhallaSegmentGet(startLL, endLL) {
       const payload = {
         locations: [
-          { lat: routeStart.lat, lon: routeStart.lng, type: "break" },
-          { lat: routeEnd.lat,   lon: routeEnd.lng,   type: "break" }
+          { lat: startLL.lat, lon: startLL.lng, type: "break" },
+          { lat: endLL.lat,   lon: endLL.lng,   type: "break" }
         ],
         costing: "auto",
         units: "miles"
@@ -1837,65 +1860,125 @@
 
       const url = `${VALHALLA_ROUTE_URL}?json=${encodeURIComponent(JSON.stringify(payload))}`;
 
-      let data;
-      try {
-        const res = await fetch(url);
-        if (!res.ok) throw new Error(`Valhalla route failed: ${res.status}`);
-        data = await res.json();
-      } catch (err) {
-        console.error(err);
-        return { ok: false, reason: "Valhalla fetch failed" };
-      }
+      for (let attempt = 0; attempt <= VALHALLA_RETRIES; attempt++) {
+        try {
+          const res = await fetchWithTimeout(url, VALHALLA_TIMEOUT_MS);
 
-      const trip = data?.trip;
-      if (!trip || trip.status !== 0) {
-        console.warn("Valhalla status:", trip?.status, trip?.status_message);
-        return { ok: false, reason: trip?.status_message || "No route found" };
-      }
-
-      const legs = Array.isArray(trip.legs) ? trip.legs : [];
-      if (!legs.length) return { ok: false, reason: "No legs returned" };
-
-      // decode polyline6 shapes per leg, stitch
-      let latlngs = [];
-      for (const leg of legs) {
-        const shape = String(leg?.shape || "");
-        if (!shape) continue;
-        const pts = decodePolyline(shape, 6); // [lat,lng]
-        if (!pts.length) continue;
-
-        if (latlngs.length) {
-          const last = latlngs[latlngs.length - 1];
-          const first = pts[0];
-          if (last && first && last[0] === first[0] && last[1] === first[1]) {
-            latlngs.push(...pts.slice(1));
-          } else {
-            latlngs.push(...pts);
+          if (!res.ok) {
+            // transient / rate-limit -> backoff + retry
+            if ((res.status === 429 || res.status === 502 || res.status === 503) && attempt < VALHALLA_RETRIES) {
+              await sleep(VALHALLA_MIN_DELAY_MS * (attempt + 1));
+              continue;
+            }
+            return { ok: false, reason: `Valhalla ${res.status}` };
           }
-        } else {
-          latlngs = pts.slice();
+
+          const data = await res.json();
+          const trip = data?.trip;
+          if (!trip || trip.status !== 0) {
+            return { ok: false, reason: trip?.status_message || "No route found" };
+          }
+
+          const legs = Array.isArray(trip.legs) ? trip.legs : [];
+          if (!legs.length) return { ok: false, reason: "No legs returned" };
+
+          let latlngs = [];
+          for (const leg of legs) {
+            const shape = String(leg?.shape || "");
+            if (!shape) continue;
+            const pts = decodePolyline(shape, 6); // [lat,lng]
+            if (!pts.length) continue;
+
+            if (latlngs.length) {
+              const last = latlngs[latlngs.length - 1];
+              const first = pts[0];
+              if (last && first && last[0] === first[0] && last[1] === first[1]) {
+                latlngs.push(...pts.slice(1));
+              } else {
+                latlngs.push(...pts);
+              }
+            } else {
+              latlngs = pts.slice();
+            }
+          }
+
+          if (latlngs.length < 2) return { ok: false, reason: "No usable shape" };
+
+          const miles = Number(trip?.summary?.length);
+          const seconds = Number(trip?.summary?.time);
+
+          return {
+            ok: true,
+            latlngs,
+            miles: Number.isFinite(miles) ? miles : null,
+            seconds: Number.isFinite(seconds) ? seconds : null
+          };
+
+        } catch (e) {
+          if (attempt < VALHALLA_RETRIES) {
+            await sleep(VALHALLA_MIN_DELAY_MS * (attempt + 1));
+            continue;
+          }
+          return { ok: false, reason: "Valhalla fetch failed" };
         }
       }
 
-      if (latlngs.length < 2) return { ok: false, reason: "No usable shape" };
-
-      // for your analyzer, we want [lng,lat]
-      const coordsLngLat = latlngs.map(p => [p[1], p[0]]);
-
-      drawRoutePolyline(latlngs.map(p => [p[0], p[1]]));
-      analyzeRouteCoords(coordsLngLat);
-
-      const miles = Number(trip?.summary?.length);
-      const seconds = Number(trip?.summary?.time);
-
-      return {
-        ok: true,
-        miles: Number.isFinite(miles) ? miles : null,
-        seconds: Number.isFinite(seconds) ? seconds : null
-      };
+      return { ok: false, reason: "Valhalla failed" };
     }
 
-    // Optional backup: OSRM if Valhalla is down / blocked
+    async function buildRouteValhallaChunked(jobId) {
+      if (!routeStart || !routeEnd) return { ok: false, reason: "Missing endpoints" };
+
+      const segPts = buildSegmentPoints(routeStart, routeEnd, ROUTE_MAX_SEGMENT_MILES);
+      const segCount = segPts.length - 1;
+
+      let allLatLngs = [];
+      let totalMiles = 0;
+      let totalSeconds = 0;
+
+      for (let i = 0; i < segCount; i++) {
+        if (jobId !== routingJobId) return { ok: false, reason: "Canceled" };
+
+        setRouteStatus(`Building route (Valhalla)… segment ${i + 1}/${segCount}`);
+
+        const a = segPts[i];
+        const b = segPts[i + 1];
+
+        const r = await fetchValhallaSegmentGet(a, b);
+        if (!r.ok) return r;
+
+        // Stitch segments without duplicating the join point
+        if (allLatLngs.length && r.latlngs.length) {
+          const last = allLatLngs[allLatLngs.length - 1];
+          const first = r.latlngs[0];
+          if (last && first && last[0] === first[0] && last[1] === first[1]) {
+            allLatLngs.push(...r.latlngs.slice(1));
+          } else {
+            allLatLngs.push(...r.latlngs);
+          }
+        } else {
+          allLatLngs = r.latlngs.slice();
+        }
+
+        if (r.miles != null) totalMiles += r.miles;
+        if (r.seconds != null) totalSeconds += r.seconds;
+
+        // Pace requests to avoid rate-limit
+        if (i < segCount - 1) await sleep(VALHALLA_MIN_DELAY_MS);
+      }
+
+      if (jobId !== routingJobId) return { ok: false, reason: "Canceled" };
+      if (allLatLngs.length < 2) return { ok: false, reason: "No final route" };
+
+      const coordsLngLat = allLatLngs.map(p => [p[1], p[0]]); // [lng,lat] for analyzer
+
+      drawRoutePolyline(allLatLngs);        // draw expects [lat,lng]
+      analyzeRouteCoords(coordsLngLat);
+
+      return { ok: true, miles: totalMiles, seconds: totalSeconds, segments: segCount };
+    }
+
+    // Optional backup: OSRM if Valhalla is truly down
     async function buildRouteOsrmFallback() {
       const s = routeStart, e = routeEnd;
       const url =
@@ -1903,7 +1986,7 @@
         `?overview=full&geometries=geojson&alternatives=false&steps=false`;
 
       try {
-        const res = await fetch(url);
+        const res = await fetchWithTimeout(url, VALHALLA_TIMEOUT_MS);
         if (!res.ok) throw new Error(`OSRM route failed: ${res.status}`);
         const data = await res.json();
         const coords = data?.routes?.[0]?.geometry?.coordinates;
@@ -1930,7 +2013,13 @@
     async function buildRoute() {
       if (!routeStart || !routeEnd) return;
 
-      const r = await buildRouteValhalla();
+      const jobId = ++routingJobId;
+      setRouteStatus("Building route (Valhalla)…");
+
+      // Try chunked Valhalla first (with retries + pacing). No instant OSRM fallback.
+      const r = await buildRouteValhallaChunked(jobId);
+
+      if (jobId !== routingJobId) return; // canceled by a newer request
 
       if (!r.ok) {
         setRouteStatus(`Valhalla failed (${r.reason}). Trying OSRM fallback…`);
@@ -1947,10 +2036,13 @@
 
       const dist = (r.miles != null) ? `${r.miles.toFixed(1)} mi` : "Distance N/A";
       const eta = (r.seconds != null) ? `ETA ${fmtDuration(r.seconds)}` : "ETA N/A";
-      setRouteStatus(`Valhalla route | ${dist} | ${eta} | Regions crossed: ${routeRegionOrder.length}`);
+      const segTxt = (r.segments && r.segments > 1) ? ` | Segments: ${r.segments}` : "";
+      setRouteStatus(`Valhalla route | ${dist} | ${eta} | Regions crossed: ${routeRegionOrder.length}${segTxt}`);
     }
 
     function clearRoute() {
+      routingJobId++; // cancels any in-flight routing
+
       routeStart = null;
       routeEnd = null;
       routeRegionOrder = [];
@@ -2126,58 +2218,6 @@
     }
 
     // =========================
-    // GPX IMPORT (for MapstoGPX output)
-    // =========================
-    function parseGpxToCoordsLngLat(gpxText) {
-      const xml = new DOMParser().parseFromString(gpxText, "application/xml");
-      const parserErr = xml.getElementsByTagName("parsererror");
-      if (parserErr && parserErr.length) return [];
-
-      const trkpts = Array.from(xml.getElementsByTagName("trkpt"));
-      let pts = trkpts;
-
-      if (!pts.length) pts = Array.from(xml.getElementsByTagName("rtept"));
-
-      const coords = [];
-      for (const p of pts) {
-        const lat = parseFloat(p.getAttribute("lat"));
-        const lon = parseFloat(p.getAttribute("lon"));
-        if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
-        coords.push([lon, lat]);
-      }
-      return coords;
-    }
-
-    function setStartEndMarkersFromCoords(coords) {
-      if (!coords || coords.length < 2) return;
-
-      const first = coords[0];
-      const last = coords[coords.length - 1];
-
-      routeStart = L.latLng(first[1], first[0]);
-      routeEnd = L.latLng(last[1], last[0]);
-
-      if (routeStartMarker) map.removeLayer(routeStartMarker);
-      if (routeEndMarker) map.removeLayer(routeEndMarker);
-
-      routeStartMarker = L.marker(routeStart, { draggable: true }).addTo(map);
-      routeEndMarker = L.marker(routeEnd, { draggable: true }).addTo(map);
-
-      routeStartMarker.on("dragend", async () => {
-        routeStart = routeStartMarker.getLatLng();
-        const addr = await reverseGeocode(routeStart.lat, routeStart.lng);
-        if (addr) document.getElementById("fromInput").value = addr;
-        if (routeStart && routeEnd) buildRoute();
-      });
-      routeEndMarker.on("dragend", async () => {
-        routeEnd = routeEndMarker.getLatLng();
-        const addr = await reverseGeocode(routeEnd.lat, routeEnd.lng);
-        if (addr) document.getElementById("toInput").value = addr;
-        if (routeStart && routeEnd) buildRoute();
-      });
-    }
-
-    // =========================
     // NOMINATIM AUTOCOMPLETE
     // =========================
     function pickSuggestion(which, lat, lng, label) {
@@ -2335,13 +2375,6 @@
     // =========================
     // ROUTE UI
     // =========================
-    function buildGoogleMapsDirUrl(originText, destText) {
-      const o = encodeURIComponent(String(originText || "").trim());
-      const d = encodeURIComponent(String(destText || "").trim());
-      if (!o || !d) return "";
-      return `https://www.google.com/maps/dir/?api=1&origin=${o}&destination=${d}&travelmode=driving`;
-    }
-
     function initRouteUI() {
       const fromEl = document.getElementById("fromInput");
       const toEl = document.getElementById("toInput");
@@ -2353,9 +2386,6 @@
       const swapBtn = document.getElementById("swapBtn");
       const buildBtn = document.getElementById("routeBuildBtn");
       const clearBtn = document.getElementById("routeClearBtn");
-
-      const openGmapsBtn = document.getElementById("openGmapsBtn");
-      const gpxFileEl = document.getElementById("gpxFile");
 
       locateBtn.addEventListener("click", () => {
         if (!navigator.geolocation) {
@@ -2470,53 +2500,6 @@
       });
 
       clearBtn.addEventListener("click", () => clearRoute());
-
-      openGmapsBtn.addEventListener("click", async () => {
-        if (!routeStart) {
-          const hit = await geocodeOne(fromEl.value);
-          if (hit) { routeStart = L.latLng(hit.lat, hit.lng); }
-        }
-        if (!routeEnd) {
-          const hit = await geocodeOne(toEl.value);
-          if (hit) { routeEnd = L.latLng(hit.lat, hit.lng); }
-        }
-
-        const url = buildGoogleMapsDirUrl(fromEl.value, toEl.value);
-        if (!url) { setRouteStatus("Set From and To first."); return; }
-        window.open(url, "_blank", "noopener,noreferrer");
-        setRouteStatus("Opened Google Maps. Copy the URL, paste it into mapstogpx.com, download GPX, then Import GPX here.");
-      });
-
-      gpxFileEl.addEventListener("change", async () => {
-        const file = gpxFileEl.files && gpxFileEl.files[0];
-        if (!file) return;
-
-        setRouteStatus("Importing GPX…");
-
-        try {
-          const text = await file.text();
-          const coords = parseGpxToCoordsLngLat(text);
-          if (!coords || coords.length < 2) {
-            setRouteStatus("GPX import failed: no usable track/route points found.");
-            return;
-          }
-
-          const latlngs = coords.map(c => [c[1], c[0]]);
-          drawRoutePolyline(latlngs);
-          analyzeRouteCoords(coords);
-
-          setStartEndMarkersFromCoords(coords);
-
-          const miles = metersToMiles(routeMetersFromCoords(coords));
-          setRouteStatus(`Imported GPX route | ${miles.toFixed(1)} mi | Regions crossed: ${routeRegionOrder.length}`);
-          setSidebarOpen(true);
-        } catch (e) {
-          console.error(e);
-          setRouteStatus("GPX import failed. Try exporting again from MapstoGPX.");
-        } finally {
-          gpxFileEl.value = "";
-        }
-      });
     }
 
     // =========================
