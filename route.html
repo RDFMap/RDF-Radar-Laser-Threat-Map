@@ -64,33 +64,44 @@
         }
 
         #sidebar h1 { font-size: 20px; margin: 0 0 6px; }
-        #status { font-size: 13px; color: #666; margin-top: 2px; }
-
+        #status { font-size: 13px; color: #666; margin-top: 2px; overflow-wrap: anywhere; }
         h2 { font-size: 15px; margin: 0 0 10px; }
 
         /* Header row */
         .header-row{
-          display:flex;
-          align-items:flex-start;
-          justify-content:space-between;
+          display:grid;
+          grid-template-columns: minmax(0,1fr) 180px;
           gap: 12px;
+          align-items:start;
         }
         .header-left{ min-width: 0; }
         .header-links{
+          width: 180px;
+          max-width: 180px;
           display:flex;
           flex-direction:column;
           align-items:flex-end;
           gap: 6px;
           text-align:right;
-          min-width: 140px;
-          max-width: 180px;
         }
         .header-links a{
+          text-decoration: none;
+        }
+        .header-links .header-btn{
+          width: 100%;
+          max-width: 180px;
+          height: 34px;
+          padding: 0 10px;
           font-size: 11px;
-          font-weight: 600;
-          line-height: 1.15;
-          text-decoration: underline;
+          font-weight: 900;
+          justify-content: center;
+          text-align: center;
           white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+
+          --btn-color: #d9d9d9;
+          --btn-tint: rgba(0,0,0,0.04);
         }
 
         /* Mobile drawer */
@@ -144,8 +155,10 @@
           #sidebar.open { transform: translateX(0); }
           body.no-scroll { overflow: hidden; }
 
-          .header-row{ flex-direction:column; align-items:flex-start; }
-          .header-links{ align-items:flex-start; text-align:left; }
+          .header-row{ grid-template-columns: 1fr; }
+
+          .header-links{ width: 100%; max-width: 100%; align-items:flex-start; text-align:left; }
+          .header-links .header-btn{ max-width: 100%; }
         }
 
         /* Inputs + autocomplete */
@@ -233,28 +246,22 @@
           margin-top:10px;
         }
 
-        /* Stops UI */
+        /* Stop rows */
         .stops-wrap { margin-top: 10px; }
-        .stop-row { display:flex; gap:8px; align-items:center; margin-top: 8px; }
-        .stop-row .input-wrap { flex: 1; }
-        .stop-badge {
+        .stop-row {
+          display:flex;
+          gap:8px;
+          align-items:center;
+          margin-top: 8px;
+        }
+        .stop-row .btn { height: 34px; padding: 0 10px; }
+        .stop-tag {
           font-size: 11px;
           font-weight: 950;
-          color: #111;
-          border: 1px solid #e6e6e6;
-          background: rgba(0,0,0,0.04);
-          border-radius: 999px;
-          padding: 4px 8px;
-          white-space: nowrap;
+          color:#111;
+          opacity: 0.75;
+          margin-top: 6px;
         }
-        .stop-remove {
-          height: 32px;
-          padding: 0 10px;
-          border-radius: 10px;
-          font-size: 11px;
-          font-weight: 950;
-        }
-        .stop-help { font-size: 12px; color:#555; line-height: 1.25; margin-top: 8px; }
 
         /* Route results cards */
         .route-state-card{
@@ -311,6 +318,13 @@
           font-weight: 950;
           margin-bottom: 6px;
         }
+        .rollup-subtitle{
+          font-size: 12px;
+          font-weight: 950;
+          margin-top: 10px;
+          margin-bottom: 6px;
+        }
+
         .rollup-line{
           font-size: 12px;
           color:#111;
@@ -418,7 +432,19 @@
         .note-line { line-height: 1.25; overflow-wrap: anywhere; word-break: break-word; }
         .note-link { display: inline-flex; align-items: center; gap: 6px; text-decoration: underline; font-weight: 650; overflow-wrap: anywhere; word-break: break-word; }
         .note-domain { font-size: 12px; color: #666; font-weight: 500; }
+        .flagline { margin-top: 6px; }
+        .flagline div { margin-top: 3px; }
 
+
+        /* Stop marker icon */
+        .stop-icon{
+          width: 18px;
+          height: 18px;
+          border-radius: 50%;
+          background: #e53935;
+          border: 2px solid #fff;
+          box-shadow: 0 8px 16px rgba(0,0,0,0.18);
+        }
         /* Player icon */
         .player-icon{
           width: 22px;
@@ -459,13 +485,13 @@
                 </div>
 
                 <div class="header-links">
-                    <a href="https://www.rdforum.org/threads/150468/" target="_blank" rel="noopener noreferrer">
+                    <a class="btn header-btn" href="https://www.rdforum.org/threads/150468/" target="_blank" rel="noopener noreferrer">
                         RDForum Thread & Updates
                     </a>
-                    <a href="https://forms.fillout.com/t/dsffrfAc4jus" target="_blank" rel="noopener noreferrer">
+                    <a class="btn header-btn" href="https://forms.fillout.com/t/dsffrfAc4jus" target="_blank" rel="noopener noreferrer">
                         Have Data? Submit here
                     </a>
-                    <a href="./index.html" target="_self" rel="noopener">
+                    <a class="btn header-btn" href="./index.html" target="_self" rel="noopener">
                         Threat Map
                     </a>
                 </div>
@@ -484,31 +510,31 @@
                     <button id="locateBtn" class="btn teal" type="button" title="Use your current location">⌖ Locate</button>
                 </div>
 
-                <div style="height:8px;"></div>
+                <div class="stops-wrap">
+                    <div class="stop-tag">Stops (optional)</div>
+                    <div id="stopsContainer"></div>
+                    <div style="margin-top:8px;">
+                        <button id="addStopBtn" class="btn" type="button">+ Add stop</button>
+                    </div>
+                </div>
+
+                <div style="height:10px;"></div>
 
                 <div class="route-grid">
                     <div class="input-wrap">
                         <input id="toInput" class="search-input" placeholder="To (address or place)…" autocomplete="off" />
                         <div id="toSug" class="suggestions" aria-label="To suggestions"></div>
                     </div>
-                    <button id="swapBtn" class="btn" type="button" title="Swap from/to">⇄ Swap</button>
+                    <button id="swapBtn" class="btn" type="button" title="Swap direction (includes stops)">⇄ Swap</button>
                 </div>
 
                 <div class="route-actions">
-                    <button class="btn" id="addStopBtn" type="button">+ Stop</button>
                     <button class="btn" id="routeBuildBtn" type="button">Build</button>
                     <button class="btn" id="routeClearBtn" type="button">Clear</button>
                 </div>
 
-                <div class="stops-wrap" id="stopsWrap" style="display:none;">
-                    <div class="stop-help">
-                        Stops are routed in order: From → Stop 1 → Stop 2 → … → To.
-                    </div>
-                    <div id="stopsList"></div>
-                </div>
-
                 <div id="routeStatus" style="margin-top:10px; font-size:12.5px; color:#444; line-height:1.25;">
-                    Type From/To (use suggestions), optionally add Stops, then Build. Locate sets From automatically.
+                    Type From/To (use suggestions), optionally add stops, then Build. Locate sets From automatically.
                 </div>
 
                 <div id="routeResults" style="margin-top:10px; display:none;"></div>
@@ -536,22 +562,30 @@
     const STATE_AGENCY_CSV_URL =
       "https://docs.google.com/spreadsheets/d/e/2PACX-1vR4ZdepcnMW0OCvCvgRTWPFGSuaQ6u75caFu8zF_Sh-VY525EwU81XzaiJhnvQTCcfHndclCHAQv9DT/pub?gid=507352241&single=true&output=csv";
 
+    const STATE_LAWS_CSV_URL =
+      "https://docs.google.com/spreadsheets/d/e/2PACX-1vR4ZdepcnMW0OCvCvgRTWPFGSuaQ6u75caFu8zF_Sh-VY525EwU81XzaiJhnvQTCcfHndclCHAQv9DT/pub?gid=1520315384&single=true&output=csv";
+
     const GEOJSON_URL = "./allCounties.json";
     const CANADA_GEOJSON_URL = "./Canada.json";
 
     const DEFAULT_CENTER = [39.5, -98.35];
     const DEFAULT_ZOOM = 4;
 
-    // Routing (Valhalla) - public instance
-    const VALHALLA_ROUTE_URL  = "https://valhalla1.openstreetmap.de/route";
+    // Routing (Valhalla)
+    const VALHALLA_ROUTE_URL = "https://valhalla1.openstreetmap.de/route";
     const VALHALLA_LOCATE_URL = "https://valhalla1.openstreetmap.de/locate";
 
-    // Chunking / reliability knobs
+    // Sampling for your county-crossing analyzer (does NOT control routing)
     const ROUTE_SAMPLE_STEP_METERS = 1200;
+
+    // Chunking safety (routing segmentation)
     const ROUTE_MAX_SEGMENT_MILES = 700;
-    const VALHALLA_TIMEOUT_MS = 25000;
-    const VALHALLA_SEGMENT_DELAY_MS = 160;
-    const VALHALLA_MAX_SPLIT_DEPTH = 5;
+    const VALHALLA_MIN_DELAY_MS = 1100;     // keep it ~1 req/sec per user
+    const VALHALLA_TIMEOUT_MS = 25000;      // long enough for big segments
+    const VALHALLA_RETRIES = 2;
+
+    // Optional fallback (only used if Valhalla completely fails)
+    const OSRM_ROUTE_URL = "https://router.project-osrm.org/route/v1/driving/";
 
     // Nominatim (OSM) autocomplete + geocode (restrict to US/CA)
     const NOMINATIM_COUNTRYCODES = "us,ca";
@@ -635,8 +669,6 @@
     function setStatus(msg) { document.getElementById("status").textContent = msg; }
     function setRouteStatus(msg) { document.getElementById("routeStatus").textContent = msg; }
 
-    function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-
     function hasValid(v) {
       if (v === undefined || v === null) return false;
       const t = String(v).trim();
@@ -714,6 +746,28 @@
       if (h <= 0) return `${m} min`;
       if (m === 0) return `${h}h`;
       return `${h}h ${m}m`;
+    }
+
+    function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+    async function fetchJsonPostWithTimeout(url, payload, timeoutMs) {
+      const controller = new AbortController();
+      const t = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const res = await fetch(url, {
+          method: "POST",
+          signal: controller.signal,
+          headers: { "Accept": "application/json", "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) {
+          const txt = await res.text().catch(() => "");
+          throw new Error(`HTTP ${res.status}${txt ? " " + txt.slice(0,180) : ""}`);
+        }
+        return await res.json();
+      } finally {
+        clearTimeout(t);
+      }
     }
 
     // Notes links formatting
@@ -951,6 +1005,9 @@
     const rowsByRegion = new Map();
     const rowsByState = new Map();
 
+    // State laws data (from your new CSV)
+    const lawsByState = new Map(); // abbr -> { full, state, trigger, meaning }
+
     // Presence sets for styling
     const hasX = new Set();
     const hasK = new Set();
@@ -976,15 +1033,49 @@
     let routeLine = null;
     let routeLineGlow = null;
 
+    // Stops
+    let routeStops = []; // [{ id, ll: L.LatLng|null, label: string, inputEl, sugEl }]
+
+    // Stop markers (red)
+    const routeStopMarkers = new Map(); // stopId -> L.Marker
+    const STOP_ICON = L.divIcon({
+      className: "",
+      html: `<div class="stop-icon"></div>`,
+      iconSize: [18,18],
+      iconAnchor: [9,9]
+    });
+
+    function upsertStopMarker(stop) {
+      if (!map || !stop || !stop.ll) return;
+      const m = routeStopMarkers.get(stop.id);
+      if (m) {
+        m.setLatLng(stop.ll);
+        return;
+      }
+      const nm = L.marker(stop.ll, { icon: STOP_ICON, interactive: false }).addTo(map);
+      routeStopMarkers.set(stop.id, nm);
+    }
+
+    function removeStopMarker(stopId) {
+      const m = routeStopMarkers.get(stopId);
+      if (!m) return;
+      try { map.removeLayer(m); } catch {}
+      routeStopMarkers.delete(stopId);
+    }
+
+    function clearStopMarkers() {
+      for (const [id, m] of routeStopMarkers.entries()) {
+        try { map.removeLayer(m); } catch {}
+      }
+      routeStopMarkers.clear();
+    }
+
     let youMarker = null;
 
     let routeRegionOrder = [];
     let routeStateGroups = [];
     const routeStateOpen = new Map();
     const routeCountyOpen = new Set();
-
-    // Stops state
-    let stops = []; // [{ id, ll: L.LatLng|null, marker: L.Marker|null, inputId, sugId }]
 
     // =========================
     // GEOJSON BOUNDS + SPATIAL LOOKUP
@@ -1224,7 +1315,7 @@
         const anyK = hasValid(row["K_band"]);
         const anyKa = hasValid(row["Ka_band"]);
         const anyL = hasValid(row["Lidar_Guns"]);
-        const anyDE = containsDE(row["Lidar_Guns"]);
+        const anyDEv = containsDE(row["Lidar_Guns"]);
         const camItems = getCamItemsFromRow(row);
         const anyCams = camItems.length > 0;
 
@@ -1232,10 +1323,10 @@
         if (anyK) hasK.add(key);
         if (anyKa) hasKa.add(key);
         if (anyL) hasLidar.add(key);
-        if (anyDE) hasDE.add(key);
+        if (anyDEv) hasDE.add(key);
         if (anyCams) hasCams.add(key);
 
-        if (anyX || anyK || anyKa || anyL || anyDE || anyCams) hasAny.add(key);
+        if (anyX || anyK || anyKa || anyL || anyDEv || anyCams) hasAny.add(key);
       }
     }
 
@@ -1268,6 +1359,53 @@
 
         if (!rowsByState.has(ab)) rowsByState.set(ab, []);
         rowsByState.get(ab).push(row);
+      }
+    }
+
+    async function loadStateLawsCsv() {
+      const res = await fetch(STATE_LAWS_CSV_URL);
+      if (!res.ok) throw new Error("State Laws CSV fetch failed: " + res.status);
+      const text = await res.text();
+      const parsed = Papa.parse(text, { header: true, skipEmptyLines: true });
+
+      lawsByState.clear();
+
+      for (const raw of parsed.data) {
+        if (!raw) continue;
+
+        const row = {};
+        for (const k of Object.keys(raw)) {
+          if (!k) continue;
+          row[k.trim()] = (raw[k] ?? "").toString().trim();
+        }
+
+        const ab = normalizeStateAbbrev(
+          getField(row, "State", "ST", "Abbrev", "STUSPS", "STATE")
+        );
+
+        if (!ab) continue;
+
+        const full = getField(row, "State Full", "State Full Name", "State Name");
+        const trigger = getField(row,
+          "“Super-speeder” style trigger (numeric, if any)",
+          "\"Super-speeder\" style trigger (numeric, if any)",
+          "Super-speeder style trigger (numeric, if any)",
+          "Trigger",
+          "Numeric trigger"
+        );
+        const meaning = getField(row,
+          "Basic meaning (plain English)",
+          "Meaning",
+          "Plain English",
+          "Summary"
+        );
+
+        lawsByState.set(ab, {
+          full: full || (STATE_NAME_MAP[ab] || ab),
+          state: ab,
+          trigger: trigger,
+          meaning: meaning
+        });
       }
     }
 
@@ -1401,10 +1539,10 @@
       const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
       return R * c;
     }
-
     function metersToMiles(m) { return m / 1609.344; }
+    function milesToMeters(mi) { return mi * 1609.344; }
 
-    // Valhalla polyline decode with precision (Valhalla uses 6)
+    // Valhalla polyline decode precision 6
     function decodePolyline(str, precision) {
       let index = 0, lat = 0, lng = 0;
       const coordinates = [];
@@ -1473,6 +1611,61 @@
     function fmtLL(ll) {
       if (!ll) return "not set";
       return `${ll.lat.toFixed(5)}, ${ll.lng.toFixed(5)}`;
+    }
+
+    // Great-circle interpolation for segmenting long legs
+    function toRad(d) { return d * Math.PI / 180; }
+    function toDeg(r) { return r * 180 / Math.PI; }
+
+    function greatCircleInterpolate(a, b, f) {
+      const φ1 = toRad(a.lat), λ1 = toRad(a.lng);
+      const φ2 = toRad(b.lat), λ2 = toRad(b.lng);
+
+      const sinΔφ = Math.sin((φ2 - φ1) / 2);
+      const sinΔλ = Math.sin((λ2 - λ1) / 2);
+      const h = sinΔφ * sinΔφ + Math.cos(φ1) * Math.cos(φ2) * sinΔλ * sinΔλ;
+
+      const δ = 2 * Math.asin(Math.min(1, Math.sqrt(Math.max(0, h))));
+      if (!Number.isFinite(δ) || δ === 0) return L.latLng(a.lat, a.lng);
+
+      const A = Math.sin((1 - f) * δ) / Math.sin(δ);
+      const B = Math.sin(f * δ) / Math.sin(δ);
+
+      const x = A * Math.cos(φ1) * Math.cos(λ1) + B * Math.cos(φ2) * Math.cos(λ2);
+      const y = A * Math.cos(φ1) * Math.sin(λ1) + B * Math.cos(φ2) * Math.sin(λ2);
+      const z = A * Math.sin(φ1) + B * Math.sin(φ2);
+
+      const φi = Math.atan2(z, Math.sqrt(x * x + y * y));
+      const λi = Math.atan2(y, x);
+
+      return L.latLng(toDeg(φi), toDeg(λi));
+    }
+
+    function haversineMilesLL(a, b) {
+      return metersToMiles(haversineMeters(a.lng, a.lat, b.lng, b.lat));
+    }
+
+    function buildSegmentPoints(startLL, endLL, maxSegMiles) {
+      const total = haversineMilesLL(startLL, endLL);
+      const segs = Math.max(1, Math.ceil(total / maxSegMiles));
+      const pts = [startLL];
+      for (let i = 1; i < segs; i++) pts.push(greatCircleInterpolate(startLL, endLL, i / segs));
+      pts.push(endLL);
+      return pts;
+    }
+
+    // LatLng stitch helper (dedupe endpoints)
+    function appendLatLngsDedup(dstLatLngs, srcLatLngs, eps) {
+      const e = Number.isFinite(eps) ? eps : 1e-6;
+      if (!Array.isArray(srcLatLngs) || !srcLatLngs.length) return;
+      if (!dstLatLngs.length) { dstLatLngs.push(...srcLatLngs); return; }
+      const last = dstLatLngs[dstLatLngs.length - 1];
+      const first = srcLatLngs[0];
+      if (last && first && Math.abs(last[0] - first[0]) <= e && Math.abs(last[1] - first[1]) <= e) {
+        dstLatLngs.push(...srcLatLngs.slice(1));
+      } else {
+        dstLatLngs.push(...srcLatLngs);
+      }
     }
 
     // =========================
@@ -1605,7 +1798,31 @@
       return (arr && arr.length) ? escapeHtml(arr.join(", ")) : `<span class="rollup-empty">None</span>`;
     }
 
-    function rollupHtml(roll) {
+    function stateLawInnerHtml(abbr) {
+      const info = lawsByState.get(abbr);
+      if (!info) {
+        return `
+          <div style="margin-top:10px; border-top:1px solid #eee; padding-top:10px;">
+            <div class="rollup-subtitle">State law trigger (${escapeHtml(abbr)})</div>
+            <div class="rollup-line"><strong>Trigger:</strong> No entry yet.</div>
+            <div class="rollup-line"><strong>Plain English:</strong> —</div>
+          </div>
+        `;
+      }
+
+      const trigger = hasValid(info.trigger) ? info.trigger : "No single statewide numeric trigger";
+      const meaning = hasValid(info.meaning) ? info.meaning : "—";
+
+      return `
+        <div style="margin-top:10px; border-top:1px solid #eee; padding-top:10px;">
+          <div class="rollup-subtitle">State law trigger (${escapeHtml(abbr)})</div>
+          <div class="rollup-line"><strong>Trigger:</strong> ${escapeHtml(trigger)}</div>
+          <div class="rollup-line"><strong>Plain English:</strong> ${escapeHtml(meaning)}</div>
+        </div>
+      `;
+    }
+
+    function rollupHtml(roll, extraHtml) {
       return `
         <div class="rollup">
           <div class="rollup-title">Threats encountered</div>
@@ -1615,6 +1832,7 @@
           <div class="rollup-line"><strong>LiDAR:</strong> ${listOrNone(roll.lidar)}</div>
           <div class="rollup-line"><strong>DE:</strong> ${listOrNone(roll.de)}</div>
           <div class="rollup-line"><strong>Speed Cameras:</strong> ${listOrNone(roll.cams)}</div>
+          ${extraHtml || ""}
         </div>
       `;
     }
@@ -1805,252 +2023,250 @@
     }
 
     // =========================
-    // VALHALLA FETCH HELPERS
+    // VALHALLA: snap + segment routing (POST, chunked, stop-aware)
     // =========================
-    async function fetchJsonWithTimeout(url, timeoutMs) {
-      const controller = new AbortController();
-      const t = setTimeout(() => controller.abort(), timeoutMs);
-      try {
-        const res = await fetch(url, { signal: controller.signal, headers: { "Accept": "application/json" } });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return await res.json();
-      } finally {
-        clearTimeout(t);
-      }
-    }
-
-    function appendLatLngsDedup(dst, src, eps=1e-6) {
-      if (!src || !src.length) return dst;
-      if (!dst.length) { dst.push(...src); return dst; }
-      const last = dst[dst.length - 1];
-      const first = src[0];
-      if (last && first && Math.abs(last[0] - first[0]) < eps && Math.abs(last[1] - first[1]) < eps) {
-        dst.push(...src.slice(1));
-      } else {
-        dst.push(...src);
-      }
-      return dst;
-    }
-
-    function appendCoordsDedup(dst, src, eps=1e-9) {
-      if (!src || !src.length) return dst;
-      if (!dst.length) { dst.push(...src); return dst; }
-      const last = dst[dst.length - 1];
-      const first = src[0];
-      if (last && first && Math.abs(last[0] - first[0]) < eps && Math.abs(last[1] - first[1]) < eps) {
-        dst.push(...src.slice(1));
-      } else {
-        dst.push(...src);
-      }
-      return dst;
-    }
-
-    function lerp(a, b, t) { return a + (b - a) * t; }
-
     async function snapToRoad(lat, lon) {
       const payload = { locations: [{ lat, lon }], costing: "auto" };
-      const url = `${VALHALLA_LOCATE_URL}?json=${encodeURIComponent(JSON.stringify(payload))}`;
       try {
-        const data = await fetchJsonWithTimeout(url, VALHALLA_TIMEOUT_MS);
-        const loc = data?.[0] || data?.locations?.[0] || null;
-
+        const data = await fetchJsonPostWithTimeout(VALHALLA_LOCATE_URL, payload, VALHALLA_TIMEOUT_MS);
+        const loc = Array.isArray(data) ? data[0] : (data?.locations?.[0] || data?.[0] || null);
         const edge = loc?.edges?.[0] || null;
         if (edge && Number.isFinite(edge.correlated_lat) && Number.isFinite(edge.correlated_lon)) {
           return { lat: edge.correlated_lat, lon: edge.correlated_lon };
         }
-
         const node = loc?.nodes?.[0] || null;
         if (node && Number.isFinite(node.lat) && Number.isFinite(node.lon)) {
           return { lat: node.lat, lon: node.lon };
         }
-
         return { lat, lon };
       } catch {
         return { lat, lon };
       }
     }
 
-    function straightLineMilesLL(aLL, bLL) {
-      const m = haversineMeters(aLL.lng, aLL.lat, bLL.lng, bLL.lat);
-      return metersToMiles(m);
-    }
+    async function routeOneSegment(a, b) {
+      const payload = {
+        locations: [
+          { lat: a.lat, lon: a.lon, type: "break" },
+          { lat: b.lat, lon: b.lon, type: "break" }
+        ],
+        costing: "auto",
+        units: "miles"
+      };
 
-    async function buildInitialBreaks(startLL, endLL, maxSegMiles) {
-      const miles = straightLineMilesLL(startLL, endLL);
-      const n = Math.max(1, Math.ceil(miles / maxSegMiles)); // number of segments
-      const pts = [{ lat: startLL.lat, lon: startLL.lng }];
+      let lastErr = null;
+      for (let attempt = 0; attempt <= VALHALLA_RETRIES; attempt++) {
+        try {
+          const data = await fetchJsonPostWithTimeout(VALHALLA_ROUTE_URL, payload, VALHALLA_TIMEOUT_MS);
+          const trip = data?.trip;
+          if (!trip || trip.status !== 0) throw new Error(trip?.status_message || "No route found");
 
-      if (n > 1) {
-        for (let i = 1; i < n; i++) {
-          const t = i / n;
-          const lat = lerp(startLL.lat, endLL.lat, t);
-          const lon = lerp(startLL.lng, endLL.lng, t);
-          const snapped = await snapToRoad(lat, lon);
-          pts.push({ lat: snapped.lat, lon: snapped.lon });
-          await sleep(VALHALLA_SEGMENT_DELAY_MS);
+          const legs = Array.isArray(trip.legs) ? trip.legs : [];
+          if (!legs.length) throw new Error("No legs returned");
+
+          let latlngs = [];
+          for (const leg of legs) {
+            const shape = String(leg?.shape || "");
+            if (!shape) continue;
+            const pts = decodePolyline(shape, 6); // [lat,lng]
+            if (!pts.length) continue;
+            appendLatLngsDedup(latlngs, pts, 1e-6);
+          }
+          if (latlngs.length < 2) throw new Error("No usable shape");
+
+          const coordsLngLat = latlngs.map(p => [p[1], p[0]]);
+          const miles = Number(trip?.summary?.length);
+          const seconds = Number(trip?.summary?.time);
+
+          return {
+            ok: true,
+            latlngs: latlngs.map(p => [p[0], p[1]]), // [lat,lng]
+            coordsLngLat,
+            miles: Number.isFinite(miles) ? miles : null,
+            seconds: Number.isFinite(seconds) ? seconds : null
+          };
+        } catch (e) {
+          lastErr = e;
+          // backoff on transient failures
+          if (attempt < VALHALLA_RETRIES) await sleep(VALHALLA_MIN_DELAY_MS * (attempt + 1));
         }
       }
 
-      pts.push({ lat: endLL.lat, lon: endLL.lng });
-      return pts;
+      return { ok: false, reason: String(lastErr?.message || lastErr || "Valhalla failed") };
     }
 
-    async function routeOneSegment(a, b) {
-      const locations = [
-        { lat: a.lat, lon: a.lon, type: "break" },
-        { lat: b.lat, lon: b.lon, type: "break" }
-      ];
+    async function buildRouteValhallaChunkedWithStops() {
+      if (!routeStart || !routeEnd) return { ok: false, reason: "Missing endpoints" };
 
-      const payload = { locations, costing: "auto", units: "miles" };
-      const url = `${VALHALLA_ROUTE_URL}?json=${encodeURIComponent(JSON.stringify(payload))}`;
-      const data = await fetchJsonWithTimeout(url, VALHALLA_TIMEOUT_MS);
+      // Build ordered route points: start -> stops(with LL) -> end
+      const stopPts = routeStops
+        .map(s => ({ ll: s.ll, label: (s.inputEl ? s.inputEl.value : s.label) }))
+        .filter(s => s.ll);
 
-      const trip = data?.trip;
-      if (!trip || trip.status !== 0) {
-        const msg = trip?.status_message || "No route found";
-        throw new Error(msg);
+      const points = [routeStart, ...stopPts.map(s => s.ll), routeEnd];
+
+      // Snap points (helps prevent off-road/invalid coordinates causing 400/route failure)
+      setRouteStatus("Snapping route points to road…");
+      const snapped = [];
+      for (let i = 0; i < points.length; i++) {
+        const p = points[i];
+        const sp = await snapToRoad(p.lat, p.lng);
+        snapped.push(L.latLng(sp.lat, sp.lon));
+        if (i < points.length - 1) await sleep(200);
       }
 
-      const legs = Array.isArray(trip.legs) ? trip.legs : [];
-      if (!legs.length) throw new Error("No legs returned");
-
-      let latlngs = [];
-      for (const leg of legs) {
-        const shape = String(leg?.shape || "");
-        if (!shape) continue;
-        const pts = decodePolyline(shape, 6); // [lat,lng]
-        if (!pts.length) continue;
-        appendLatLngsDedup(latlngs, pts, 1e-6);
+      // Build segment pairs across legs, splitting long legs into <= 700mi chunks
+      const segmentPairs = [];
+      for (let i = 0; i < snapped.length - 1; i++) {
+        const a = snapped[i];
+        const b = snapped[i + 1];
+        const segPts = buildSegmentPoints(a, b, ROUTE_MAX_SEGMENT_MILES);
+        for (let j = 0; j < segPts.length - 1; j++) {
+          segmentPairs.push([segPts[j], segPts[j + 1]]);
+        }
       }
 
-      if (latlngs.length < 2) throw new Error("No usable shape");
+      if (!segmentPairs.length) return { ok: false, reason: "No segments to route" };
 
-      const coordsLngLat = latlngs.map(p => [p[1], p[0]]);
+      let allLatLngs = [];
+      let allCoordsLngLat = [];
+      let totalMiles = 0;
+      let totalSeconds = 0;
 
-      const miles = Number(trip?.summary?.length);
-      const seconds = Number(trip?.summary?.time);
+      for (let i = 0; i < segmentPairs.length; i++) {
+        const a = segmentPairs[i][0];
+        const b = segmentPairs[i][1];
 
-      return {
-        latlngs: latlngs.map(p => [p[0], p[1]]),
-        coordsLngLat,
-        miles: Number.isFinite(miles) ? miles : null,
-        seconds: Number.isFinite(seconds) ? seconds : null
-      };
-    }
+        setRouteStatus(`Building route (Valhalla)… segment ${i + 1}/${segmentPairs.length}`);
 
-    async function routeSegmentAdaptive(a, b, depth) {
-      try {
-        return await routeOneSegment(a, b);
-      } catch (e) {
-        if (depth >= VALHALLA_MAX_SPLIT_DEPTH) throw e;
+        const r = await routeOneSegment(
+          { lat: a.lat, lon: a.lng },
+          { lat: b.lat, lon: b.lng }
+        );
 
-        const midLat = (a.lat + b.lat) / 2;
-        const midLon = (a.lon + b.lon) / 2;
-        const mid = await snapToRoad(midLat, midLon);
+        if (!r.ok) return r;
 
-        await sleep(VALHALLA_SEGMENT_DELAY_MS);
+        appendLatLngsDedup(allLatLngs, r.latlngs, 1e-6);
 
-        const left = await routeSegmentAdaptive(a, mid, depth + 1);
-        await sleep(VALHALLA_SEGMENT_DELAY_MS);
-        const right = await routeSegmentAdaptive(mid, b, depth + 1);
+        if (!allCoordsLngLat.length) allCoordsLngLat = r.coordsLngLat.slice();
+        else {
+          const last = allCoordsLngLat[allCoordsLngLat.length - 1];
+          const first = r.coordsLngLat[0];
+          if (last && first && Math.abs(last[0] - first[0]) < 1e-9 && Math.abs(last[1] - first[1]) < 1e-9) {
+            allCoordsLngLat.push(...r.coordsLngLat.slice(1));
+          } else {
+            allCoordsLngLat.push(...r.coordsLngLat);
+          }
+        }
 
-        const latlngs = [];
-        const coordsLngLat = [];
-        appendLatLngsDedup(latlngs, left.latlngs);
-        appendLatLngsDedup(latlngs, right.latlngs);
-        appendCoordsDedup(coordsLngLat, left.coordsLngLat);
-        appendCoordsDedup(coordsLngLat, right.coordsLngLat);
+        if (r.miles != null) totalMiles += r.miles;
+        if (r.seconds != null) totalSeconds += r.seconds;
 
-        const miles = (left.miles != null && right.miles != null) ? (left.miles + right.miles) : null;
-        const seconds = (left.seconds != null && right.seconds != null) ? (left.seconds + right.seconds) : null;
-
-        return { latlngs, coordsLngLat, miles, seconds };
-      }
-    }
-
-    async function buildRouteValhallaChunkedForLeg(startLL, endLL, legLabel) {
-      const breaks = await buildInitialBreaks(startLL, endLL, ROUTE_MAX_SEGMENT_MILES);
-
-      let fullLatLngs = [];
-      let fullCoords = [];
-      let sumMiles = 0;
-      let sumSeconds = 0;
-      let milesOk = true;
-      let secondsOk = true;
-
-      for (let i = 0; i < breaks.length - 1; i++) {
-        setRouteStatus(`${legLabel} • segment ${i+1}/${breaks.length-1}…`);
-
-        const a = breaks[i];
-        const b = breaks[i + 1];
-
-        const seg = await routeSegmentAdaptive(a, b, 0);
-
-        appendLatLngsDedup(fullLatLngs, seg.latlngs);
-        appendCoordsDedup(fullCoords, seg.coordsLngLat);
-
-        if (seg.miles == null) milesOk = false;
-        else sumMiles += seg.miles;
-
-        if (seg.seconds == null) secondsOk = false;
-        else sumSeconds += seg.seconds;
-
-        await sleep(VALHALLA_SEGMENT_DELAY_MS);
+        if (i < segmentPairs.length - 1) await sleep(VALHALLA_MIN_DELAY_MS);
       }
 
-      return {
-        latlngs: fullLatLngs,
-        coordsLngLat: fullCoords,
-        miles: milesOk ? sumMiles : null,
-        seconds: secondsOk ? sumSeconds : null
-      };
-    }
+      if (allLatLngs.length < 2 || allCoordsLngLat.length < 2) return { ok: false, reason: "No final route" };
 
-    async function buildRouteWithStops() {
-      if (!routeStart || !routeEnd) throw new Error("Missing endpoints.");
+      drawRoutePolyline(allLatLngs);
+      analyzeRouteCoords(allCoordsLngLat);
 
-      // collect waypoints: start + stops (in order) + end
-      const pts = [routeStart];
-      for (const s of stops) {
-        if (!s.ll) continue;
-        pts.push(s.ll);
-      }
-      pts.push(routeEnd);
-
-      if (pts.length < 2) throw new Error("Not enough points.");
-
-      // build each leg and stitch
-      let fullLatLngs = [];
-      let fullCoords = [];
-      let sumMiles = 0;
-      let sumSeconds = 0;
-      let milesOk = true;
-      let secondsOk = true;
-
-      for (let i = 0; i < pts.length - 1; i++) {
-        const legLabel = `Leg ${i+1}/${pts.length-1}`;
-        const leg = await buildRouteValhallaChunkedForLeg(pts[i], pts[i+1], legLabel);
-
-        appendLatLngsDedup(fullLatLngs, leg.latlngs);
-        appendCoordsDedup(fullCoords, leg.coordsLngLat);
-
-        if (leg.miles == null) milesOk = false;
-        else sumMiles += leg.miles;
-
-        if (leg.seconds == null) secondsOk = false;
-        else sumSeconds += leg.seconds;
-      }
-
-      return {
-        latlngs: fullLatLngs,
-        coordsLngLat: fullCoords,
-        miles: milesOk ? sumMiles : null,
-        seconds: secondsOk ? sumSeconds : null
-      };
+      return { ok: true, miles: totalMiles, seconds: totalSeconds, segments: segmentPairs.length };
     }
 
     // =========================
-    // ROUTE RESULTS RENDER
+    // OSRM fallback (only if Valhalla completely fails)
+    // Supports multiple waypoints: start;stops;end
+    // =========================
+    async function buildRouteOsrmFallbackMulti(pointsLL) {
+      try {
+        const coords = pointsLL.map(p => `${p.lng},${p.lat}`).join(";");
+        const url = `${OSRM_ROUTE_URL}${coords}?overview=full&geometries=geojson&alternatives=false&steps=false`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`OSRM route failed: ${res.status}`);
+        const data = await res.json();
+        const geom = data?.routes?.[0]?.geometry?.coordinates;
+        if (!geom || geom.length < 2) return { ok: false, reason: "No route found" };
+
+        const latlngs = geom.map(c => [c[1], c[0]]);
+        drawRoutePolyline(latlngs);
+        analyzeRouteCoords(geom);
+
+        const meters = Number(data?.routes?.[0]?.distance);
+        const seconds = Number(data?.routes?.[0]?.duration);
+
+        return {
+          ok: true,
+          miles: Number.isFinite(meters) ? metersToMiles(meters) : null,
+          seconds: Number.isFinite(seconds) ? seconds : null
+        };
+      } catch (e) {
+        console.error(e);
+        return { ok: false, reason: "OSRM failed" };
+      }
+    }
+
+    async function buildRoute() {
+      if (!routeStart || !routeEnd) return;
+
+      // Try Valhalla chunked + stop-aware first (do NOT instantly fall back)
+      const r = await buildRouteValhallaChunkedWithStops();
+      if (r.ok) {
+        const dist = (r.miles != null) ? `${r.miles.toFixed(1)} mi` : "Distance N/A";
+        const eta = (r.seconds != null) ? `ETA ${fmtDuration(r.seconds)}` : "ETA N/A";
+        setRouteStatus(`Valhalla route | ${dist} | ${eta} | Regions crossed: ${routeRegionOrder.length} | Segments: ${r.segments}`);
+        return;
+      }
+
+      // If Valhalla fails, only then try OSRM
+      setRouteStatus(`Valhalla failed (${r.reason}). Trying OSRM fallback…`);
+
+      const stopPts = routeStops.map(s => s.ll).filter(Boolean);
+      const points = [routeStart, ...stopPts, routeEnd];
+
+      const r2 = await buildRouteOsrmFallbackMulti(points);
+      if (!r2.ok) {
+        setRouteStatus("Route fetch failed. Try again.");
+        return;
+      }
+
+      const dist2 = (r2.miles != null) ? `${r2.miles.toFixed(1)} mi` : "Distance N/A";
+      const eta2 = (r2.seconds != null) ? `ETA ${fmtDuration(r2.seconds)}` : "ETA N/A";
+      setRouteStatus(`OSRM route | ${dist2} | ${eta2} | Regions crossed: ${routeRegionOrder.length}`);
+    }
+
+    function clearRoute() {
+      routeStart = null;
+      routeEnd = null;
+
+      clearStopMarkers();
+      routeStops = [];
+      const stopsEl = document.getElementById("stopsContainer");
+      if (stopsEl) stopsEl.innerHTML = "";
+
+      routeRegionOrder = [];
+      routeStateGroups = [];
+      routeStateOpen.clear();
+      routeCountyOpen.clear();
+      focusedRegionKey = null;
+      focusedCanadaLayer = null;
+
+      if (routeStartMarker) { map.removeLayer(routeStartMarker); routeStartMarker = null; }
+      if (routeEndMarker) { map.removeLayer(routeEndMarker); routeEndMarker = null; }
+      if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
+      if (routeLineGlow) { map.removeLayer(routeLineGlow); routeLineGlow = null; }
+
+      const resultsEl = document.getElementById("routeResults");
+      resultsEl.style.display = "none";
+      resultsEl.innerHTML = "";
+
+      document.getElementById("fromInput").value = "";
+      document.getElementById("toInput").value = "";
+
+      setRouteStatus("Type From/To (use suggestions), optionally add stops, then Build. Locate sets From automatically.");
+    }
+
+    // =========================
+    // ROUTE RESULTS RENDER (includes state laws)
     // =========================
     function renderRouteResults() {
       const resultsEl = document.getElementById("routeResults");
@@ -2092,6 +2308,8 @@
           ? `${detailsCount}/${countyCount} regions with details on route`
           : `${stateRecordCount} state record${stateRecordCount===1?"":"s"} • ${detailsCount}/${countyCount} counties with details on route`;
 
+        const lawExtra = (!g.isCanada) ? stateLawInnerHtml(g.abbrev) : "";
+
         html += `
           <div class="route-state-card" data-state="${escapeAttr(g.id)}">
             <div class="route-state-head">
@@ -2105,7 +2323,7 @@
               </button>
             </div>
 
-            ${rollupHtml(roll)}
+            ${rollupHtml(roll, lawExtra)}
 
             <div class="route-state-body ${open ? "open" : ""}" data-body="${escapeAttr(g.id)}">
               ${(!g.isCanada && stateRows.length) ? `
@@ -2203,230 +2421,8 @@
     }
 
     // =========================
-    // STOP MANAGEMENT
+    // NOMINATIM AUTOCOMPLETE + GEOCODE
     // =========================
-    function removeStopById(id) {
-      const idx = stops.findIndex(s => s.id === id);
-      if (idx < 0) return;
-      const s = stops[idx];
-      if (s.marker) { map.removeLayer(s.marker); s.marker = null; }
-      stops.splice(idx, 1);
-      renderStopsUI();
-    }
-
-    function renderStopsUI() {
-      const wrap = document.getElementById("stopsWrap");
-      const list = document.getElementById("stopsList");
-
-      if (!stops.length) {
-        wrap.style.display = "none";
-        list.innerHTML = "";
-        return;
-      }
-
-      wrap.style.display = "block";
-
-      list.innerHTML = stops.map((s, i) => `
-        <div class="stop-row">
-          <span class="stop-badge">Stop ${i+1}</span>
-          <div class="input-wrap">
-            <input id="${escapeAttr(s.inputId)}" class="search-input" placeholder="Stop ${i+1} (address or place)…" autocomplete="off" />
-            <div id="${escapeAttr(s.sugId)}" class="suggestions" aria-label="Stop ${i+1} suggestions"></div>
-          </div>
-          <button type="button" class="btn stop-remove" data-remove-stop="${escapeAttr(s.id)}">Remove</button>
-        </div>
-      `).join("");
-
-      // wire remove buttons
-      list.querySelectorAll("button[data-remove-stop]").forEach(btn => {
-        btn.addEventListener("click", () => removeStopById(btn.getAttribute("data-remove-stop")));
-      });
-
-      // attach autocomplete for each stop input
-      for (let i = 0; i < stops.length; i++) {
-        const s = stops[i];
-        const input = document.getElementById(s.inputId);
-        if (input) {
-          input.value = s.label || "";
-        }
-
-        attachAutocompleteStop(s, i);
-      }
-    }
-
-    function pickStopSuggestion(stopId, lat, lng, label) {
-      const s = stops.find(x => x.id === stopId);
-      if (!s) return;
-
-      const ll = L.latLng(lat, lng);
-      s.ll = ll;
-      s.label = label;
-
-      if (s.marker) map.removeLayer(s.marker);
-      s.marker = L.marker(ll, { draggable: true }).addTo(map);
-
-      s.marker.on("dragend", async () => {
-        s.ll = s.marker.getLatLng();
-        const addr = await reverseGeocode(s.ll.lat, s.ll.lng);
-        if (addr) {
-          s.label = addr;
-          const input = document.getElementById(s.inputId);
-          if (input) input.value = addr;
-        }
-      });
-
-      const input = document.getElementById(s.inputId);
-      if (input) input.value = label;
-
-      map.setView(ll, Math.max(map.getZoom(), 10));
-    }
-
-    function attachAutocompleteStop(stop, index) {
-      const input = document.getElementById(stop.inputId);
-      const sug = document.getElementById(stop.sugId);
-      if (!input || !sug) return;
-
-      let tmr = null;
-      let lastQuery = "";
-
-      const render = (items) => {
-        if (!items.length) {
-          sug.classList.remove("open");
-          sug.innerHTML = "";
-          return;
-        }
-
-        sug.innerHTML = items.map((it, idx) => {
-          const top = it.top ? it.top : it.label.split(",")[0];
-          const sub = it.label;
-          return `
-            <div class="s-item" data-idx="${idx}">
-              <div class="s-top">${escapeHtml(top)}</div>
-              <div class="s-sub">${escapeHtml(sub)}</div>
-            </div>
-          `;
-        }).join("");
-
-        sug.classList.add("open");
-
-        sug.querySelectorAll(".s-item").forEach(node => {
-          node.addEventListener("click", () => {
-            const idx = parseInt(node.getAttribute("data-idx"), 10);
-            const it = items[idx];
-            if (!it) return;
-            sug.classList.remove("open");
-            sug.innerHTML = "";
-            pickStopSuggestion(stop.id, it.lat, it.lng, it.label);
-          });
-        });
-      };
-
-      input.addEventListener("input", () => {
-        const q = input.value;
-        lastQuery = q;
-
-        if (tmr) clearTimeout(tmr);
-        tmr = setTimeout(async () => {
-          const current = input.value;
-          if (current !== lastQuery) return;
-
-          const items = await fetchSuggestions(current);
-          if (input.value !== current) return;
-
-          render(items);
-        }, 220);
-      });
-
-      input.addEventListener("focus", async () => {
-        const q = input.value;
-        if (q.trim().length >= 3) {
-          const items = await fetchSuggestions(q);
-          render(items);
-        }
-      });
-
-      input.addEventListener("keydown", (e) => {
-        if (e.key === "Escape") {
-          sug.classList.remove("open");
-          sug.innerHTML = "";
-        }
-        if (e.key === "Enter") {
-          e.preventDefault();
-          document.getElementById("routeBuildBtn").click();
-        }
-      });
-
-      document.addEventListener("click", (e) => {
-        const wrap = input.parentElement;
-        if (!wrap.contains(e.target)) {
-          sug.classList.remove("open");
-          sug.innerHTML = "";
-        }
-      });
-    }
-
-    // =========================
-    // ROUTE CLEAR
-    // =========================
-    function clearRoute() {
-      routeStart = null;
-      routeEnd = null;
-      routeRegionOrder = [];
-      routeStateGroups = [];
-      routeStateOpen.clear();
-      routeCountyOpen.clear();
-      focusedRegionKey = null;
-      focusedCanadaLayer = null;
-
-      // stops
-      for (const s of stops) {
-        if (s.marker) map.removeLayer(s.marker);
-      }
-      stops = [];
-      renderStopsUI();
-
-      if (routeStartMarker) { map.removeLayer(routeStartMarker); routeStartMarker = null; }
-      if (routeEndMarker) { map.removeLayer(routeEndMarker); routeEndMarker = null; }
-      if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
-      if (routeLineGlow) { map.removeLayer(routeLineGlow); routeLineGlow = null; }
-
-      const resultsEl = document.getElementById("routeResults");
-      resultsEl.style.display = "none";
-      resultsEl.innerHTML = "";
-
-      setRouteStatus("Type From/To (use suggestions), optionally add Stops, then Build. Locate sets From automatically.");
-    }
-
-    // =========================
-    // NOMINATIM AUTOCOMPLETE (FROM/TO)
-    // =========================
-    function pickSuggestion(which, lat, lng, label) {
-      const ll = L.latLng(lat, lng);
-      if (which === "from") {
-        routeStart = ll;
-        if (routeStartMarker) map.removeLayer(routeStartMarker);
-        routeStartMarker = L.marker(routeStart, { draggable: true }).addTo(map);
-        routeStartMarker.on("dragend", async () => {
-          routeStart = routeStartMarker.getLatLng();
-          const addr = await reverseGeocode(routeStart.lat, routeStart.lng);
-          if (addr) document.getElementById("fromInput").value = addr;
-        });
-        document.getElementById("fromInput").value = label;
-      } else {
-        routeEnd = ll;
-        if (routeEndMarker) map.removeLayer(routeEndMarker);
-        routeEndMarker = L.marker(routeEnd, { draggable: true }).addTo(map);
-        routeEndMarker.on("dragend", async () => {
-          routeEnd = routeEndMarker.getLatLng();
-          const addr = await reverseGeocode(routeEnd.lat, routeEnd.lng);
-          if (addr) document.getElementById("toInput").value = addr;
-        });
-        document.getElementById("toInput").value = label;
-      }
-
-      map.setView(ll, Math.max(map.getZoom(), 12));
-    }
-
     async function reverseGeocode(lat, lng) {
       const url = `${NOMINATIM_REVERSE}${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}`;
       const res = await fetch(url, { headers: { "Accept": "application/json" } });
@@ -2499,7 +2495,7 @@
       });
     }
 
-    function attachAutocomplete(inputId, sugId, which) {
+    function attachAutocompleteStatic(inputId, sugId, onPickLL) {
       const input = document.getElementById(inputId);
       const sug = document.getElementById(sugId);
 
@@ -2518,7 +2514,7 @@
           const items = await fetchSuggestions(current);
           if (input.value !== current) return;
 
-          renderSuggestions(sug, items, (it) => pickSuggestion(which, it.lat, it.lng, it.label));
+          renderSuggestions(sug, items, (it) => onPickLL(it.lat, it.lng, it.label));
         }, 220);
       });
 
@@ -2526,27 +2522,125 @@
         const q = input.value;
         if (q.trim().length >= 3) {
           const items = await fetchSuggestions(q);
-          renderSuggestions(sug, items, (it) => pickSuggestion(which, it.lat, it.lng, it.label));
+          renderSuggestions(sug, items, (it) => onPickLL(it.lat, it.lng, it.label));
         }
       });
 
       input.addEventListener("keydown", (e) => {
-        if (e.key === "Escape") {
-          sug.classList.remove("open");
-          sug.innerHTML = "";
-        }
-        if (e.key === "Enter") {
-          e.preventDefault();
-          document.getElementById("routeBuildBtn").click();
-        }
+        if (e.key === "Escape") { sug.classList.remove("open"); sug.innerHTML = ""; }
+        if (e.key === "Enter") { e.preventDefault(); document.getElementById("routeBuildBtn").click(); }
       });
 
       document.addEventListener("click", (e) => {
         const wrap = input.parentElement;
-        if (!wrap.contains(e.target)) {
-          sug.classList.remove("open");
-          sug.innerHTML = "";
+        if (!wrap.contains(e.target)) { sug.classList.remove("open"); sug.innerHTML = ""; }
+      });
+    }
+
+    function attachAutocompleteDynamic(input, sug, onPickLL) {
+      let tmr = null;
+      let lastQuery = "";
+
+      input.addEventListener("input", () => {
+        const q = input.value;
+        lastQuery = q;
+
+        if (tmr) clearTimeout(tmr);
+        tmr = setTimeout(async () => {
+          const current = input.value;
+          if (current !== lastQuery) return;
+
+          const items = await fetchSuggestions(current);
+          if (input.value !== current) return;
+
+          renderSuggestions(sug, items, (it) => onPickLL(it.lat, it.lng, it.label));
+        }, 220);
+      });
+
+      input.addEventListener("focus", async () => {
+        const q = input.value;
+        if (q.trim().length >= 3) {
+          const items = await fetchSuggestions(q);
+          renderSuggestions(sug, items, (it) => onPickLL(it.lat, it.lng, it.label));
         }
+      });
+
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") { sug.classList.remove("open"); sug.innerHTML = ""; }
+        if (e.key === "Enter") { e.preventDefault(); document.getElementById("routeBuildBtn").click(); }
+      });
+
+      document.addEventListener("click", (e) => {
+        const wrap = input.parentElement;
+        if (!wrap.contains(e.target)) { sug.classList.remove("open"); sug.innerHTML = ""; }
+      });
+    }
+
+    async function geocodeOne(q) {
+      const t = String(q || "").trim();
+      if (!t) return null;
+      const url = NOMINATIM_SEARCH + encodeURIComponent(t);
+      const res = await fetch(url, { headers: { "Accept": "application/json" } });
+      if (!res.ok) return null;
+      const arr = await res.json();
+      if (!Array.isArray(arr) || !arr.length) return null;
+      const hit = arr[0];
+      const lat = parseFloat(hit.lat);
+      const lng = parseFloat(hit.lon);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+      return { lat, lng, label: String(hit.display_name || t).trim() };
+    }
+
+    // =========================
+    // STOP UI
+    // =========================
+    function addStopRow(prefillText) {
+      const container = document.getElementById("stopsContainer");
+      const id = `stop_${Math.random().toString(16).slice(2)}`;
+
+      const wrap = document.createElement("div");
+      wrap.className = "stop-row";
+
+      const inputWrap = document.createElement("div");
+      inputWrap.className = "input-wrap";
+
+      const input = document.createElement("input");
+      input.className = "search-input";
+      input.placeholder = "Stop (address or place)…";
+      input.autocomplete = "off";
+      if (prefillText) input.value = prefillText;
+
+      const sug = document.createElement("div");
+      sug.className = "suggestions";
+      sug.setAttribute("aria-label", "Stop suggestions");
+
+      inputWrap.appendChild(input);
+      inputWrap.appendChild(sug);
+
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "btn";
+      removeBtn.textContent = "Remove";
+
+      wrap.appendChild(inputWrap);
+      wrap.appendChild(removeBtn);
+      container.appendChild(wrap);
+
+      const stop = { id, ll: null, label: "", inputEl: input, sugEl: sug, wrapEl: wrap };
+      routeStops.push(stop);
+
+      attachAutocompleteDynamic(input, sug, (lat, lng, label) => {
+        stop.ll = L.latLng(lat, lng);
+        stop.label = label;
+        input.value = label;
+        upsertStopMarker(stop);
+        map.setView(stop.ll, Math.max(map.getZoom(), 12));
+      });
+
+      removeBtn.addEventListener("click", () => {
+        routeStops = routeStops.filter(s => s.id !== id);
+        removeStopMarker(id);
+        wrap.remove();
       });
     }
 
@@ -2557,33 +2651,41 @@
       const fromEl = document.getElementById("fromInput");
       const toEl = document.getElementById("toInput");
 
-      attachAutocomplete("fromInput", "fromSug", "from");
-      attachAutocomplete("toInput", "toSug", "to");
+      attachAutocompleteStatic("fromInput", "fromSug", (lat, lng, label) => {
+        const ll = L.latLng(lat, lng);
+        routeStart = ll;
+        if (routeStartMarker) map.removeLayer(routeStartMarker);
+        routeStartMarker = L.marker(routeStart, { draggable: true }).addTo(map);
+        routeStartMarker.on("dragend", async () => {
+          routeStart = routeStartMarker.getLatLng();
+          const addr = await reverseGeocode(routeStart.lat, routeStart.lng);
+          if (addr) fromEl.value = addr;
+        });
+        fromEl.value = label;
+        map.setView(ll, Math.max(map.getZoom(), 12));
+      });
+
+      attachAutocompleteStatic("toInput", "toSug", (lat, lng, label) => {
+        const ll = L.latLng(lat, lng);
+        routeEnd = ll;
+        if (routeEndMarker) map.removeLayer(routeEndMarker);
+        routeEndMarker = L.marker(routeEnd, { draggable: true }).addTo(map);
+        routeEndMarker.on("dragend", async () => {
+          routeEnd = routeEndMarker.getLatLng();
+          const addr = await reverseGeocode(routeEnd.lat, routeEnd.lng);
+          if (addr) toEl.value = addr;
+        });
+        toEl.value = label;
+        map.setView(ll, Math.max(map.getZoom(), 12));
+      });
+
+      const addStopBtn = document.getElementById("addStopBtn");
+      addStopBtn.addEventListener("click", () => addStopRow(""));
 
       const locateBtn = document.getElementById("locateBtn");
       const swapBtn = document.getElementById("swapBtn");
-      const addStopBtn = document.getElementById("addStopBtn");
       const buildBtn = document.getElementById("routeBuildBtn");
       const clearBtn = document.getElementById("routeClearBtn");
-
-      addStopBtn.addEventListener("click", () => {
-        const id = "stop_" + Math.random().toString(36).slice(2, 10);
-        stops.push({
-          id,
-          ll: null,
-          marker: null,
-          label: "",
-          inputId: `${id}_input`,
-          sugId: `${id}_sug`
-        });
-        renderStopsUI();
-        setSidebarOpen(true);
-        // focus the new stop input
-        setTimeout(() => {
-          const input = document.getElementById(`${id}_input`);
-          if (input) input.focus();
-        }, 0);
-      });
 
       locateBtn.addEventListener("click", () => {
         if (!navigator.geolocation) {
@@ -2623,14 +2725,16 @@
         }, { enableHighAccuracy: true, timeout: 12000 });
       });
 
-      swapBtn.addEventListener("click", async () => {
-        const tmp = fromEl.value;
-        fromEl.value = toEl.value;
-        toEl.value = tmp;
+      swapBtn.addEventListener("click", () => {
+        const tmp = fromEl.value; fromEl.value = toEl.value; toEl.value = tmp;
 
-        const tmpLL = routeStart;
-        routeStart = routeEnd;
-        routeEnd = tmpLL;
+        const tmpLL = routeStart; routeStart = routeEnd; routeEnd = tmpLL;
+
+        // reverse stops order + keep text fields
+        const stopTexts = routeStops.map(s => s.inputEl.value);
+        routeStops.forEach((s, i) => { s.inputEl.value = stopTexts[stopTexts.length - 1 - i] || ""; s.ll = null; s.label = ""; });
+        routeStops.reverse();
+        clearStopMarkers();
 
         if (routeStartMarker) { map.removeLayer(routeStartMarker); routeStartMarker = null; }
         if (routeEndMarker) { map.removeLayer(routeEndMarker); routeEndMarker = null; }
@@ -2643,7 +2747,6 @@
             if (addr) fromEl.value = addr;
           });
         }
-
         if (routeEnd) {
           routeEndMarker = L.marker(routeEnd, { draggable: true }).addTo(map);
           routeEndMarker.on("dragend", async () => {
@@ -2653,84 +2756,65 @@
           });
         }
 
-        setRouteStatus(`Start: ${fmtLL(routeStart)} | End: ${fmtLL(routeEnd)} (Stops unchanged)`);
+        setRouteStatus(`Direction swapped. Start: ${fmtLL(routeStart)} | End: ${fmtLL(routeEnd)}. Stops need re-picked (or Build to resolve).`);
       });
-
-      async function geocodeOne(q) {
-        const t = String(q || "").trim();
-        if (!t) return null;
-        const url = NOMINATIM_SEARCH + encodeURIComponent(t);
-        const res = await fetch(url, { headers: { "Accept": "application/json" } });
-        if (!res.ok) return null;
-        const arr = await res.json();
-        if (!Array.isArray(arr) || !arr.length) return null;
-        const hit = arr[0];
-        const lat = parseFloat(hit.lat);
-        const lng = parseFloat(hit.lon);
-        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-        return { lat, lng, label: String(hit.display_name || t).trim() };
-      }
 
       buildBtn.addEventListener("click", async () => {
         setRouteStatus("Resolving From/To/Stops…");
 
+        // Resolve From
         if (!routeStart) {
           const hit = await geocodeOne(fromEl.value);
           if (!hit) { setRouteStatus("Could not find From. Pick a suggestion or type a clearer address."); return; }
-          pickSuggestion("from", hit.lat, hit.lng, hit.label);
+          routeStart = L.latLng(hit.lat, hit.lng);
+          if (routeStartMarker) map.removeLayer(routeStartMarker);
+          routeStartMarker = L.marker(routeStart, { draggable: true }).addTo(map);
+          fromEl.value = hit.label;
         }
 
+        // Resolve To
         if (!routeEnd) {
           const hit = await geocodeOne(toEl.value);
           if (!hit) { setRouteStatus("Could not find To. Pick a suggestion or type a clearer address."); return; }
-          pickSuggestion("to", hit.lat, hit.lng, hit.label);
+          routeEnd = L.latLng(hit.lat, hit.lng);
+          if (routeEndMarker) map.removeLayer(routeEndMarker);
+          routeEndMarker = L.marker(routeEnd, { draggable: true }).addTo(map);
+          toEl.value = hit.label;
         }
 
-        // geocode any stop inputs that are filled but not set
-        for (const s of stops) {
+        // Resolve Stops (only those with text)
+        for (const s of routeStops) {
+          const txt = String(s.inputEl.value || "").trim();
+          if (!txt) { s.ll = null; continue; }
           if (s.ll) continue;
-          const input = document.getElementById(s.inputId);
-          const txt = input ? input.value.trim() : "";
-          if (!txt) continue;
-
           const hit = await geocodeOne(txt);
-          if (hit) pickStopSuggestion(s.id, hit.lat, hit.lng, hit.label);
+          if (!hit) { setRouteStatus(`Could not find a stop: "${txt}". Pick a suggestion or remove it.`); return; }
+          s.ll = L.latLng(hit.lat, hit.lng);
+          s.inputEl.value = hit.label;
+          upsertStopMarker(s);
+          await sleep(120);
         }
 
-        if (!routeStart || !routeEnd) {
-          setRouteStatus("Missing From or To.");
-          return;
-        }
-
-        // ensure all stops either set or blank
-        const missingStops = stops
-          .map((s, i) => ({ s, i }))
-          .filter(x => {
-            const input = document.getElementById(x.s.inputId);
-            const hasText = input && input.value.trim().length > 0;
-            return hasText && !x.s.ll;
+        // Set draggable handlers now (after build resolves)
+        if (routeStartMarker) {
+          routeStartMarker.off("dragend");
+          routeStartMarker.on("dragend", async () => {
+            routeStart = routeStartMarker.getLatLng();
+            const addr = await reverseGeocode(routeStart.lat, routeStart.lng);
+            if (addr) fromEl.value = addr;
           });
-
-        if (missingStops.length) {
-          setRouteStatus(`One or more stops couldn't be resolved. Fix Stop ${missingStops[0].i + 1} (pick a suggestion).`);
-          return;
+        }
+        if (routeEndMarker) {
+          routeEndMarker.off("dragend");
+          routeEndMarker.on("dragend", async () => {
+            routeEnd = routeEndMarker.getLatLng();
+            const addr = await reverseGeocode(routeEnd.lat, routeEnd.lng);
+            if (addr) toEl.value = addr;
+          });
         }
 
-        try {
-          setRouteStatus("Building route with Valhalla (chunked)… this can take a bit on long trips.");
-          const r = await buildRouteWithStops();
-
-          drawRoutePolyline(r.latlngs);
-          analyzeRouteCoords(r.coordsLngLat);
-
-          const dist = (r.miles != null) ? `${r.miles.toFixed(1)} mi` : "Distance N/A";
-          const eta = (r.seconds != null) ? `ETA ${fmtDuration(r.seconds)}` : "ETA N/A";
-          setRouteStatus(`Fastest route | ${dist} | ${eta} | Regions crossed: ${routeRegionOrder.length}`);
-
-          setSidebarOpen(true);
-        } catch (e) {
-          setRouteStatus(`Route failed: ${String(e?.message || e || "unknown error")}`);
-        }
+        await buildRoute();
+        setSidebarOpen(true);
       });
 
       clearBtn.addEventListener("click", () => clearRoute());
@@ -2742,7 +2826,7 @@
     async function bootstrap() {
       try {
         setStatus("Loading CSV data…");
-        await Promise.all([loadCountyCsv(), loadStateAgencyCsv()]);
+        await Promise.all([loadCountyCsv(), loadStateAgencyCsv(), loadStateLawsCsv()]);
 
         setStatus("Loading US county shapes…");
         const usRes = await fetch(GEOJSON_URL);
@@ -2784,8 +2868,7 @@
         initRouteUI();
 
         setSidebarOpen(false);
-        setStatus("Ready. Use From/To suggestions, optionally add Stops, then Build.");
-
+        setStatus("Ready. Use From/To suggestions, optionally add stops, then Build.");
       } catch (err) {
         console.error(err);
         setStatus("Error loading data. Open console for details.");

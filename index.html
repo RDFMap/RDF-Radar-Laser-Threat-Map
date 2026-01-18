@@ -384,32 +384,54 @@
     .cam-off{ opacity: 0.50; }
 
     /* === Header (title/status left, links right) === */
-    .header-row{
-      display:flex;
-      align-items:flex-start;
-      justify-content:space-between;
-      gap: 12px;
-    }
-    .header-left{ min-width: 0; }
-    .header-links{
-      display:flex;
-      flex-direction:column;
-      align-items:flex-end;
-      gap: 6px;
-      text-align:right;
-      min-width: 140px;
-      max-width: 180px;
-    }
+.header-row{
+  display:grid;
+  grid-template-columns: 1fr 180px; /* hard wall between text and buttons */
+  gap: 12px;
+  align-items:start;
+}
 
-    .header-links a{
-      font-size: 11px;
-      font-weight: 600;
-      line-height: 1.15;
-      text-decoration: underline;
-      word-break: normal;
-      overflow-wrap: normal;
-      white-space: nowrap;
-    }
+.header-left{
+  min-width: 0; /* critical: allows wrapping inside left column only */
+}
+
+.header-links{
+  width: 180px;
+  max-width: 180px;
+  display:flex;
+  flex-direction:column;
+  align-items:flex-end;
+  gap: 8px;
+  text-align:right;
+}
+
+/* turn the links into button-styled anchors */
+.header-links a{
+  text-decoration: none;
+}
+
+.header-btn{
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid #d6d6d6;
+  background: rgba(0,0,0,0.04);
+  color:#111;
+
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+
+  font-size: 11px;
+  font-weight: 900;
+
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 
     /* =========================
        MOBILE: COLLAPSIBLE SIDEBAR (DRAWER) + TOGGLE BUTTON
@@ -582,13 +604,19 @@
         </div>
 
         <div class="header-links">
-          <a href="https://www.rdforum.org/threads/150468/" target="_blank" rel="noopener noreferrer">
+          <a class="header-btn" href="https://www.rdforum.org/threads/150468/" target="_blank" rel="noopener noreferrer">
             RDForum Thread & Updates
           </a>
-          <a href="https://forms.fillout.com/t/dsffrfAc4jus" target="_blank" rel="noopener noreferrer">
+
+          <a class="header-btn" href="https://forms.fillout.com/t/dsffrfAc4jus" target="_blank" rel="noopener noreferrer">
             Have Data? Submit here
           </a>
+
+          <a class="header-btn" href="./route.html" target="_self" rel="noopener">
+            Route Planner
+          </a>
         </div>
+
       </div>
     </div>
 
