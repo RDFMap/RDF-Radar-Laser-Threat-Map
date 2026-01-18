@@ -233,6 +233,29 @@
           margin-top:10px;
         }
 
+        /* Stops UI */
+        .stops-wrap { margin-top: 10px; }
+        .stop-row { display:flex; gap:8px; align-items:center; margin-top: 8px; }
+        .stop-row .input-wrap { flex: 1; }
+        .stop-badge {
+          font-size: 11px;
+          font-weight: 950;
+          color: #111;
+          border: 1px solid #e6e6e6;
+          background: rgba(0,0,0,0.04);
+          border-radius: 999px;
+          padding: 4px 8px;
+          white-space: nowrap;
+        }
+        .stop-remove {
+          height: 32px;
+          padding: 0 10px;
+          border-radius: 10px;
+          font-size: 11px;
+          font-weight: 950;
+        }
+        .stop-help { font-size: 12px; color:#555; line-height: 1.25; margin-top: 8px; }
+
         /* Route results cards */
         .route-state-card{
           border: 1px solid #eee;
@@ -395,8 +418,6 @@
         .note-line { line-height: 1.25; overflow-wrap: anywhere; word-break: break-word; }
         .note-link { display: inline-flex; align-items: center; gap: 6px; text-decoration: underline; font-weight: 650; overflow-wrap: anywhere; word-break: break-word; }
         .note-domain { font-size: 12px; color: #666; font-weight: 500; }
-        .flagline { margin-top: 6px; }
-        .flagline div { margin-top: 3px; }
 
         /* Player icon */
         .player-icon{
@@ -460,9 +481,7 @@
                         <input id="fromInput" class="search-input" placeholder="From (address or place)…" autocomplete="off" />
                         <div id="fromSug" class="suggestions" aria-label="From suggestions"></div>
                     </div>
-                    <button id="locateBtn" class="btn teal" type="button" title="Use your current location">
-                        ⌖ Locate
-                    </button>
+                    <button id="locateBtn" class="btn teal" type="button" title="Use your current location">⌖ Locate</button>
                 </div>
 
                 <div style="height:8px;"></div>
@@ -472,18 +491,24 @@
                         <input id="toInput" class="search-input" placeholder="To (address or place)…" autocomplete="off" />
                         <div id="toSug" class="suggestions" aria-label="To suggestions"></div>
                     </div>
-                    <button id="swapBtn" class="btn" type="button" title="Swap from/to">
-                        ⇄ Swap
-                    </button>
+                    <button id="swapBtn" class="btn" type="button" title="Swap from/to">⇄ Swap</button>
                 </div>
 
                 <div class="route-actions">
+                    <button class="btn" id="addStopBtn" type="button">+ Stop</button>
                     <button class="btn" id="routeBuildBtn" type="button">Build</button>
                     <button class="btn" id="routeClearBtn" type="button">Clear</button>
                 </div>
 
+                <div class="stops-wrap" id="stopsWrap" style="display:none;">
+                    <div class="stop-help">
+                        Stops are routed in order: From → Stop 1 → Stop 2 → … → To.
+                    </div>
+                    <div id="stopsList"></div>
+                </div>
+
                 <div id="routeStatus" style="margin-top:10px; font-size:12.5px; color:#444; line-height:1.25;">
-                    Type From/To (use suggestions), then Build. Locate sets From automatically.
+                    Type From/To (use suggestions), optionally add Stops, then Build. Locate sets From automatically.
                 </div>
 
                 <div id="routeResults" style="margin-top:10px; display:none;"></div>
@@ -517,18 +542,16 @@
     const DEFAULT_CENTER = [39.5, -98.35];
     const DEFAULT_ZOOM = 4;
 
-    // Routing (Valhalla)
-    const VALHALLA_ROUTE_URL = "https://valhalla1.openstreetmap.de/route"; // public instance
+    // Routing (Valhalla) - public instance
+    const VALHALLA_ROUTE_URL  = "https://valhalla1.openstreetmap.de/route";
+    const VALHALLA_LOCATE_URL = "https://valhalla1.openstreetmap.de/locate";
+
+    // Chunking / reliability knobs
     const ROUTE_SAMPLE_STEP_METERS = 1200;
-
-    // Chunking / pacing / retries (prevents instant OSRM fallback)
-    const ROUTE_MAX_SEGMENT_MILES = 700;     // split long routes into ~700mi chunks
-    const VALHALLA_MIN_DELAY_MS = 1150;      // ~1 request/sec pacing
-    const VALHALLA_RETRIES = 2;              // retries per segment
-    const VALHALLA_TIMEOUT_MS = 20000;       // per request timeout (lets long routes take time)
-
-    // Optional fallback (kept as backup)
-    const OSRM_ROUTE_URL = "https://router.project-osrm.org/route/v1/driving/";
+    const ROUTE_MAX_SEGMENT_MILES = 700;
+    const VALHALLA_TIMEOUT_MS = 25000;
+    const VALHALLA_SEGMENT_DELAY_MS = 160;
+    const VALHALLA_MAX_SPLIT_DEPTH = 5;
 
     // Nominatim (OSM) autocomplete + geocode (restrict to US/CA)
     const NOMINATIM_COUNTRYCODES = "us,ca";
@@ -611,6 +634,8 @@
 
     function setStatus(msg) { document.getElementById("status").textContent = msg; }
     function setRouteStatus(msg) { document.getElementById("routeStatus").textContent = msg; }
+
+    function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
     function hasValid(v) {
       if (v === undefined || v === null) return false;
@@ -958,8 +983,8 @@
     const routeStateOpen = new Map();
     const routeCountyOpen = new Set();
 
-    // Prevent instant fallback while Valhalla routing is in-progress
-    let routingJobId = 0;
+    // Stops state
+    let stops = []; // [{ id, ll: L.LatLng|null, marker: L.Marker|null, inputId, sugId }]
 
     // =========================
     // GEOJSON BOUNDS + SPATIAL LOOKUP
@@ -1377,19 +1402,9 @@
       return R * c;
     }
 
-    function routeMetersFromCoords(coordsLngLat) {
-      if (!coordsLngLat || coordsLngLat.length < 2) return 0;
-      let sum = 0;
-      for (let i = 1; i < coordsLngLat.length; i++) {
-        const a = coordsLngLat[i-1], b = coordsLngLat[i];
-        sum += haversineMeters(a[0], a[1], b[0], b[1]);
-      }
-      return sum;
-    }
-
     function metersToMiles(m) { return m / 1609.344; }
 
-    // Valhalla/OSRM polyline decode with precision (Valhalla uses 6)
+    // Valhalla polyline decode with precision (Valhalla uses 6)
     function decodePolyline(str, precision) {
       let index = 0, lat = 0, lng = 0;
       const coordinates = [];
@@ -1460,62 +1475,6 @@
       return `${ll.lat.toFixed(5)}, ${ll.lng.toFixed(5)}`;
     }
 
-    function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-    function toRad(d) { return d * Math.PI / 180; }
-    function toDeg(r) { return r * 180 / Math.PI; }
-
-    function haversineMilesLL(a, b) {
-      return metersToMiles(haversineMeters(a.lng, a.lat, b.lng, b.lat));
-    }
-
-    // Great-circle interpolation for segment split points (more stable than linear lat/lng)
-    function greatCircleInterpolate(a, b, f) {
-      const φ1 = toRad(a.lat), λ1 = toRad(a.lng);
-      const φ2 = toRad(b.lat), λ2 = toRad(b.lng);
-
-      const sinΔφ = Math.sin((φ2 - φ1) / 2);
-      const sinΔλ = Math.sin((λ2 - λ1) / 2);
-      const h = sinΔφ * sinΔφ + Math.cos(φ1) * Math.cos(φ2) * sinΔλ * sinΔλ;
-
-      const δ = 2 * Math.asin(Math.min(1, Math.sqrt(Math.max(0, h))));
-      if (!Number.isFinite(δ) || δ === 0) return L.latLng(a.lat, a.lng);
-
-      const A = Math.sin((1 - f) * δ) / Math.sin(δ);
-      const B = Math.sin(f * δ) / Math.sin(δ);
-
-      const x = A * Math.cos(φ1) * Math.cos(λ1) + B * Math.cos(φ2) * Math.cos(λ2);
-      const y = A * Math.cos(φ1) * Math.sin(λ1) + B * Math.cos(φ2) * Math.sin(λ2);
-      const z = A * Math.sin(φ1) + B * Math.sin(φ2);
-
-      const φi = Math.atan2(z, Math.sqrt(x * x + y * y));
-      const λi = Math.atan2(y, x);
-
-      return L.latLng(toDeg(φi), toDeg(λi));
-    }
-
-    function buildSegmentPoints(startLL, endLL, maxSegMiles) {
-      const total = haversineMilesLL(startLL, endLL);
-      const segs = Math.max(1, Math.ceil(total / maxSegMiles));
-
-      const pts = [startLL];
-      for (let i = 1; i < segs; i++) {
-        pts.push(greatCircleInterpolate(startLL, endLL, i / segs));
-      }
-      pts.push(endLL);
-      return pts;
-    }
-
-    async function fetchWithTimeout(url, timeoutMs) {
-      const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), timeoutMs);
-      try {
-        const res = await fetch(url, { signal: ctrl.signal, headers: { "Accept": "application/json" } });
-        return res;
-      } finally {
-        clearTimeout(t);
-      }
-    }
-
     // =========================
     // ROUTE GROUPING (US states + CA provinces)
     // =========================
@@ -1570,7 +1529,7 @@
           });
           order.push(gid);
 
-          if (!routeStateOpen.has(gid)) routeStateOpen.set(gid, false); // default collapsed
+          if (!routeStateOpen.has(gid)) routeStateOpen.set(gid, false);
         }
 
         const g = groups.get(gid);
@@ -1846,222 +1805,248 @@
     }
 
     // =========================
-    // ROUTE BUILD (VALHALLA) - CHUNKED + RETRIES + PACING
+    // VALHALLA FETCH HELPERS
     // =========================
-    async function fetchValhallaSegmentGet(startLL, endLL) {
-      const payload = {
-        locations: [
-          { lat: startLL.lat, lon: startLL.lng, type: "break" },
-          { lat: endLL.lat,   lon: endLL.lng,   type: "break" }
-        ],
-        costing: "auto",
-        units: "miles"
-      };
-
-      const url = `${VALHALLA_ROUTE_URL}?json=${encodeURIComponent(JSON.stringify(payload))}`;
-
-      for (let attempt = 0; attempt <= VALHALLA_RETRIES; attempt++) {
-        try {
-          const res = await fetchWithTimeout(url, VALHALLA_TIMEOUT_MS);
-
-          if (!res.ok) {
-            // transient / rate-limit -> backoff + retry
-            if ((res.status === 429 || res.status === 502 || res.status === 503) && attempt < VALHALLA_RETRIES) {
-              await sleep(VALHALLA_MIN_DELAY_MS * (attempt + 1));
-              continue;
-            }
-            return { ok: false, reason: `Valhalla ${res.status}` };
-          }
-
-          const data = await res.json();
-          const trip = data?.trip;
-          if (!trip || trip.status !== 0) {
-            return { ok: false, reason: trip?.status_message || "No route found" };
-          }
-
-          const legs = Array.isArray(trip.legs) ? trip.legs : [];
-          if (!legs.length) return { ok: false, reason: "No legs returned" };
-
-          let latlngs = [];
-          for (const leg of legs) {
-            const shape = String(leg?.shape || "");
-            if (!shape) continue;
-            const pts = decodePolyline(shape, 6); // [lat,lng]
-            if (!pts.length) continue;
-
-            if (latlngs.length) {
-              const last = latlngs[latlngs.length - 1];
-              const first = pts[0];
-              if (last && first && last[0] === first[0] && last[1] === first[1]) {
-                latlngs.push(...pts.slice(1));
-              } else {
-                latlngs.push(...pts);
-              }
-            } else {
-              latlngs = pts.slice();
-            }
-          }
-
-          if (latlngs.length < 2) return { ok: false, reason: "No usable shape" };
-
-          const miles = Number(trip?.summary?.length);
-          const seconds = Number(trip?.summary?.time);
-
-          return {
-            ok: true,
-            latlngs,
-            miles: Number.isFinite(miles) ? miles : null,
-            seconds: Number.isFinite(seconds) ? seconds : null
-          };
-
-        } catch (e) {
-          if (attempt < VALHALLA_RETRIES) {
-            await sleep(VALHALLA_MIN_DELAY_MS * (attempt + 1));
-            continue;
-          }
-          return { ok: false, reason: "Valhalla fetch failed" };
-        }
-      }
-
-      return { ok: false, reason: "Valhalla failed" };
-    }
-
-    async function buildRouteValhallaChunked(jobId) {
-      if (!routeStart || !routeEnd) return { ok: false, reason: "Missing endpoints" };
-
-      const segPts = buildSegmentPoints(routeStart, routeEnd, ROUTE_MAX_SEGMENT_MILES);
-      const segCount = segPts.length - 1;
-
-      let allLatLngs = [];
-      let totalMiles = 0;
-      let totalSeconds = 0;
-
-      for (let i = 0; i < segCount; i++) {
-        if (jobId !== routingJobId) return { ok: false, reason: "Canceled" };
-
-        setRouteStatus(`Building route (Valhalla)… segment ${i + 1}/${segCount}`);
-
-        const a = segPts[i];
-        const b = segPts[i + 1];
-
-        const r = await fetchValhallaSegmentGet(a, b);
-        if (!r.ok) return r;
-
-        // Stitch segments without duplicating the join point
-        if (allLatLngs.length && r.latlngs.length) {
-          const last = allLatLngs[allLatLngs.length - 1];
-          const first = r.latlngs[0];
-          if (last && first && last[0] === first[0] && last[1] === first[1]) {
-            allLatLngs.push(...r.latlngs.slice(1));
-          } else {
-            allLatLngs.push(...r.latlngs);
-          }
-        } else {
-          allLatLngs = r.latlngs.slice();
-        }
-
-        if (r.miles != null) totalMiles += r.miles;
-        if (r.seconds != null) totalSeconds += r.seconds;
-
-        // Pace requests to avoid rate-limit
-        if (i < segCount - 1) await sleep(VALHALLA_MIN_DELAY_MS);
-      }
-
-      if (jobId !== routingJobId) return { ok: false, reason: "Canceled" };
-      if (allLatLngs.length < 2) return { ok: false, reason: "No final route" };
-
-      const coordsLngLat = allLatLngs.map(p => [p[1], p[0]]); // [lng,lat] for analyzer
-
-      drawRoutePolyline(allLatLngs);        // draw expects [lat,lng]
-      analyzeRouteCoords(coordsLngLat);
-
-      return { ok: true, miles: totalMiles, seconds: totalSeconds, segments: segCount };
-    }
-
-    // Optional backup: OSRM if Valhalla is truly down
-    async function buildRouteOsrmFallback() {
-      const s = routeStart, e = routeEnd;
-      const url =
-        `${OSRM_ROUTE_URL}${s.lng},${s.lat};${e.lng},${e.lat}` +
-        `?overview=full&geometries=geojson&alternatives=false&steps=false`;
-
+    async function fetchJsonWithTimeout(url, timeoutMs) {
+      const controller = new AbortController();
+      const t = setTimeout(() => controller.abort(), timeoutMs);
       try {
-        const res = await fetchWithTimeout(url, VALHALLA_TIMEOUT_MS);
-        if (!res.ok) throw new Error(`OSRM route failed: ${res.status}`);
-        const data = await res.json();
-        const coords = data?.routes?.[0]?.geometry?.coordinates;
-        if (!coords || coords.length < 2) return { ok: false, reason: "No route found" };
-
-        const latlngs = coords.map(c => [c[1], c[0]]);
-        drawRoutePolyline(latlngs);
-        analyzeRouteCoords(coords);
-
-        const meters = Number(data?.routes?.[0]?.distance);
-        const seconds = Number(data?.routes?.[0]?.duration);
-
-        return {
-          ok: true,
-          miles: Number.isFinite(meters) ? metersToMiles(meters) : null,
-          seconds: Number.isFinite(seconds) ? seconds : null
-        };
-      } catch (e) {
-        console.error(e);
-        return { ok: false, reason: "OSRM failed" };
+        const res = await fetch(url, { signal: controller.signal, headers: { "Accept": "application/json" } });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return await res.json();
+      } finally {
+        clearTimeout(t);
       }
     }
 
-    async function buildRoute() {
-      if (!routeStart || !routeEnd) return;
+    function appendLatLngsDedup(dst, src, eps=1e-6) {
+      if (!src || !src.length) return dst;
+      if (!dst.length) { dst.push(...src); return dst; }
+      const last = dst[dst.length - 1];
+      const first = src[0];
+      if (last && first && Math.abs(last[0] - first[0]) < eps && Math.abs(last[1] - first[1]) < eps) {
+        dst.push(...src.slice(1));
+      } else {
+        dst.push(...src);
+      }
+      return dst;
+    }
 
-      const jobId = ++routingJobId;
-      setRouteStatus("Building route (Valhalla)…");
+    function appendCoordsDedup(dst, src, eps=1e-9) {
+      if (!src || !src.length) return dst;
+      if (!dst.length) { dst.push(...src); return dst; }
+      const last = dst[dst.length - 1];
+      const first = src[0];
+      if (last && first && Math.abs(last[0] - first[0]) < eps && Math.abs(last[1] - first[1]) < eps) {
+        dst.push(...src.slice(1));
+      } else {
+        dst.push(...src);
+      }
+      return dst;
+    }
 
-      // Try chunked Valhalla first (with retries + pacing). No instant OSRM fallback.
-      const r = await buildRouteValhallaChunked(jobId);
+    function lerp(a, b, t) { return a + (b - a) * t; }
 
-      if (jobId !== routingJobId) return; // canceled by a newer request
+    async function snapToRoad(lat, lon) {
+      const payload = { locations: [{ lat, lon }], costing: "auto" };
+      const url = `${VALHALLA_LOCATE_URL}?json=${encodeURIComponent(JSON.stringify(payload))}`;
+      try {
+        const data = await fetchJsonWithTimeout(url, VALHALLA_TIMEOUT_MS);
+        const loc = data?.[0] || data?.locations?.[0] || null;
 
-      if (!r.ok) {
-        setRouteStatus(`Valhalla failed (${r.reason}). Trying OSRM fallback…`);
-        const r2 = await buildRouteOsrmFallback();
-        if (!r2.ok) {
-          setRouteStatus("Route fetch failed. Try again.");
-          return;
+        const edge = loc?.edges?.[0] || null;
+        if (edge && Number.isFinite(edge.correlated_lat) && Number.isFinite(edge.correlated_lon)) {
+          return { lat: edge.correlated_lat, lon: edge.correlated_lon };
         }
-        const dist = (r2.miles != null) ? `${r2.miles.toFixed(1)} mi` : "Distance N/A";
-        const eta = (r2.seconds != null) ? `ETA ${fmtDuration(r2.seconds)}` : "ETA N/A";
-        setRouteStatus(`OSRM route | ${dist} | ${eta} | Regions crossed: ${routeRegionOrder.length}`);
-        return;
-      }
 
-      const dist = (r.miles != null) ? `${r.miles.toFixed(1)} mi` : "Distance N/A";
-      const eta = (r.seconds != null) ? `ETA ${fmtDuration(r.seconds)}` : "ETA N/A";
-      const segTxt = (r.segments && r.segments > 1) ? ` | Segments: ${r.segments}` : "";
-      setRouteStatus(`Valhalla route | ${dist} | ${eta} | Regions crossed: ${routeRegionOrder.length}${segTxt}`);
+        const node = loc?.nodes?.[0] || null;
+        if (node && Number.isFinite(node.lat) && Number.isFinite(node.lon)) {
+          return { lat: node.lat, lon: node.lon };
+        }
+
+        return { lat, lon };
+      } catch {
+        return { lat, lon };
+      }
     }
 
-    function clearRoute() {
-      routingJobId++; // cancels any in-flight routing
+    function straightLineMilesLL(aLL, bLL) {
+      const m = haversineMeters(aLL.lng, aLL.lat, bLL.lng, bLL.lat);
+      return metersToMiles(m);
+    }
 
-      routeStart = null;
-      routeEnd = null;
-      routeRegionOrder = [];
-      routeStateGroups = [];
-      routeStateOpen.clear();
-      routeCountyOpen.clear();
-      focusedRegionKey = null;
-      focusedCanadaLayer = null;
+    async function buildInitialBreaks(startLL, endLL, maxSegMiles) {
+      const miles = straightLineMilesLL(startLL, endLL);
+      const n = Math.max(1, Math.ceil(miles / maxSegMiles)); // number of segments
+      const pts = [{ lat: startLL.lat, lon: startLL.lng }];
 
-      if (routeStartMarker) { map.removeLayer(routeStartMarker); routeStartMarker = null; }
-      if (routeEndMarker) { map.removeLayer(routeEndMarker); routeEndMarker = null; }
-      if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
-      if (routeLineGlow) { map.removeLayer(routeLineGlow); routeLineGlow = null; }
+      if (n > 1) {
+        for (let i = 1; i < n; i++) {
+          const t = i / n;
+          const lat = lerp(startLL.lat, endLL.lat, t);
+          const lon = lerp(startLL.lng, endLL.lng, t);
+          const snapped = await snapToRoad(lat, lon);
+          pts.push({ lat: snapped.lat, lon: snapped.lon });
+          await sleep(VALHALLA_SEGMENT_DELAY_MS);
+        }
+      }
 
-      const resultsEl = document.getElementById("routeResults");
-      resultsEl.style.display = "none";
-      resultsEl.innerHTML = "";
+      pts.push({ lat: endLL.lat, lon: endLL.lng });
+      return pts;
+    }
 
-      setRouteStatus("Type From/To (use suggestions), then Build. Locate sets From automatically.");
+    async function routeOneSegment(a, b) {
+      const locations = [
+        { lat: a.lat, lon: a.lon, type: "break" },
+        { lat: b.lat, lon: b.lon, type: "break" }
+      ];
+
+      const payload = { locations, costing: "auto", units: "miles" };
+      const url = `${VALHALLA_ROUTE_URL}?json=${encodeURIComponent(JSON.stringify(payload))}`;
+      const data = await fetchJsonWithTimeout(url, VALHALLA_TIMEOUT_MS);
+
+      const trip = data?.trip;
+      if (!trip || trip.status !== 0) {
+        const msg = trip?.status_message || "No route found";
+        throw new Error(msg);
+      }
+
+      const legs = Array.isArray(trip.legs) ? trip.legs : [];
+      if (!legs.length) throw new Error("No legs returned");
+
+      let latlngs = [];
+      for (const leg of legs) {
+        const shape = String(leg?.shape || "");
+        if (!shape) continue;
+        const pts = decodePolyline(shape, 6); // [lat,lng]
+        if (!pts.length) continue;
+        appendLatLngsDedup(latlngs, pts, 1e-6);
+      }
+
+      if (latlngs.length < 2) throw new Error("No usable shape");
+
+      const coordsLngLat = latlngs.map(p => [p[1], p[0]]);
+
+      const miles = Number(trip?.summary?.length);
+      const seconds = Number(trip?.summary?.time);
+
+      return {
+        latlngs: latlngs.map(p => [p[0], p[1]]),
+        coordsLngLat,
+        miles: Number.isFinite(miles) ? miles : null,
+        seconds: Number.isFinite(seconds) ? seconds : null
+      };
+    }
+
+    async function routeSegmentAdaptive(a, b, depth) {
+      try {
+        return await routeOneSegment(a, b);
+      } catch (e) {
+        if (depth >= VALHALLA_MAX_SPLIT_DEPTH) throw e;
+
+        const midLat = (a.lat + b.lat) / 2;
+        const midLon = (a.lon + b.lon) / 2;
+        const mid = await snapToRoad(midLat, midLon);
+
+        await sleep(VALHALLA_SEGMENT_DELAY_MS);
+
+        const left = await routeSegmentAdaptive(a, mid, depth + 1);
+        await sleep(VALHALLA_SEGMENT_DELAY_MS);
+        const right = await routeSegmentAdaptive(mid, b, depth + 1);
+
+        const latlngs = [];
+        const coordsLngLat = [];
+        appendLatLngsDedup(latlngs, left.latlngs);
+        appendLatLngsDedup(latlngs, right.latlngs);
+        appendCoordsDedup(coordsLngLat, left.coordsLngLat);
+        appendCoordsDedup(coordsLngLat, right.coordsLngLat);
+
+        const miles = (left.miles != null && right.miles != null) ? (left.miles + right.miles) : null;
+        const seconds = (left.seconds != null && right.seconds != null) ? (left.seconds + right.seconds) : null;
+
+        return { latlngs, coordsLngLat, miles, seconds };
+      }
+    }
+
+    async function buildRouteValhallaChunkedForLeg(startLL, endLL, legLabel) {
+      const breaks = await buildInitialBreaks(startLL, endLL, ROUTE_MAX_SEGMENT_MILES);
+
+      let fullLatLngs = [];
+      let fullCoords = [];
+      let sumMiles = 0;
+      let sumSeconds = 0;
+      let milesOk = true;
+      let secondsOk = true;
+
+      for (let i = 0; i < breaks.length - 1; i++) {
+        setRouteStatus(`${legLabel} • segment ${i+1}/${breaks.length-1}…`);
+
+        const a = breaks[i];
+        const b = breaks[i + 1];
+
+        const seg = await routeSegmentAdaptive(a, b, 0);
+
+        appendLatLngsDedup(fullLatLngs, seg.latlngs);
+        appendCoordsDedup(fullCoords, seg.coordsLngLat);
+
+        if (seg.miles == null) milesOk = false;
+        else sumMiles += seg.miles;
+
+        if (seg.seconds == null) secondsOk = false;
+        else sumSeconds += seg.seconds;
+
+        await sleep(VALHALLA_SEGMENT_DELAY_MS);
+      }
+
+      return {
+        latlngs: fullLatLngs,
+        coordsLngLat: fullCoords,
+        miles: milesOk ? sumMiles : null,
+        seconds: secondsOk ? sumSeconds : null
+      };
+    }
+
+    async function buildRouteWithStops() {
+      if (!routeStart || !routeEnd) throw new Error("Missing endpoints.");
+
+      // collect waypoints: start + stops (in order) + end
+      const pts = [routeStart];
+      for (const s of stops) {
+        if (!s.ll) continue;
+        pts.push(s.ll);
+      }
+      pts.push(routeEnd);
+
+      if (pts.length < 2) throw new Error("Not enough points.");
+
+      // build each leg and stitch
+      let fullLatLngs = [];
+      let fullCoords = [];
+      let sumMiles = 0;
+      let sumSeconds = 0;
+      let milesOk = true;
+      let secondsOk = true;
+
+      for (let i = 0; i < pts.length - 1; i++) {
+        const legLabel = `Leg ${i+1}/${pts.length-1}`;
+        const leg = await buildRouteValhallaChunkedForLeg(pts[i], pts[i+1], legLabel);
+
+        appendLatLngsDedup(fullLatLngs, leg.latlngs);
+        appendCoordsDedup(fullCoords, leg.coordsLngLat);
+
+        if (leg.miles == null) milesOk = false;
+        else sumMiles += leg.miles;
+
+        if (leg.seconds == null) secondsOk = false;
+        else sumSeconds += leg.seconds;
+      }
+
+      return {
+        latlngs: fullLatLngs,
+        coordsLngLat: fullCoords,
+        miles: milesOk ? sumMiles : null,
+        seconds: secondsOk ? sumSeconds : null
+      };
     }
 
     // =========================
@@ -2218,7 +2203,202 @@
     }
 
     // =========================
-    // NOMINATIM AUTOCOMPLETE
+    // STOP MANAGEMENT
+    // =========================
+    function removeStopById(id) {
+      const idx = stops.findIndex(s => s.id === id);
+      if (idx < 0) return;
+      const s = stops[idx];
+      if (s.marker) { map.removeLayer(s.marker); s.marker = null; }
+      stops.splice(idx, 1);
+      renderStopsUI();
+    }
+
+    function renderStopsUI() {
+      const wrap = document.getElementById("stopsWrap");
+      const list = document.getElementById("stopsList");
+
+      if (!stops.length) {
+        wrap.style.display = "none";
+        list.innerHTML = "";
+        return;
+      }
+
+      wrap.style.display = "block";
+
+      list.innerHTML = stops.map((s, i) => `
+        <div class="stop-row">
+          <span class="stop-badge">Stop ${i+1}</span>
+          <div class="input-wrap">
+            <input id="${escapeAttr(s.inputId)}" class="search-input" placeholder="Stop ${i+1} (address or place)…" autocomplete="off" />
+            <div id="${escapeAttr(s.sugId)}" class="suggestions" aria-label="Stop ${i+1} suggestions"></div>
+          </div>
+          <button type="button" class="btn stop-remove" data-remove-stop="${escapeAttr(s.id)}">Remove</button>
+        </div>
+      `).join("");
+
+      // wire remove buttons
+      list.querySelectorAll("button[data-remove-stop]").forEach(btn => {
+        btn.addEventListener("click", () => removeStopById(btn.getAttribute("data-remove-stop")));
+      });
+
+      // attach autocomplete for each stop input
+      for (let i = 0; i < stops.length; i++) {
+        const s = stops[i];
+        const input = document.getElementById(s.inputId);
+        if (input) {
+          input.value = s.label || "";
+        }
+
+        attachAutocompleteStop(s, i);
+      }
+    }
+
+    function pickStopSuggestion(stopId, lat, lng, label) {
+      const s = stops.find(x => x.id === stopId);
+      if (!s) return;
+
+      const ll = L.latLng(lat, lng);
+      s.ll = ll;
+      s.label = label;
+
+      if (s.marker) map.removeLayer(s.marker);
+      s.marker = L.marker(ll, { draggable: true }).addTo(map);
+
+      s.marker.on("dragend", async () => {
+        s.ll = s.marker.getLatLng();
+        const addr = await reverseGeocode(s.ll.lat, s.ll.lng);
+        if (addr) {
+          s.label = addr;
+          const input = document.getElementById(s.inputId);
+          if (input) input.value = addr;
+        }
+      });
+
+      const input = document.getElementById(s.inputId);
+      if (input) input.value = label;
+
+      map.setView(ll, Math.max(map.getZoom(), 10));
+    }
+
+    function attachAutocompleteStop(stop, index) {
+      const input = document.getElementById(stop.inputId);
+      const sug = document.getElementById(stop.sugId);
+      if (!input || !sug) return;
+
+      let tmr = null;
+      let lastQuery = "";
+
+      const render = (items) => {
+        if (!items.length) {
+          sug.classList.remove("open");
+          sug.innerHTML = "";
+          return;
+        }
+
+        sug.innerHTML = items.map((it, idx) => {
+          const top = it.top ? it.top : it.label.split(",")[0];
+          const sub = it.label;
+          return `
+            <div class="s-item" data-idx="${idx}">
+              <div class="s-top">${escapeHtml(top)}</div>
+              <div class="s-sub">${escapeHtml(sub)}</div>
+            </div>
+          `;
+        }).join("");
+
+        sug.classList.add("open");
+
+        sug.querySelectorAll(".s-item").forEach(node => {
+          node.addEventListener("click", () => {
+            const idx = parseInt(node.getAttribute("data-idx"), 10);
+            const it = items[idx];
+            if (!it) return;
+            sug.classList.remove("open");
+            sug.innerHTML = "";
+            pickStopSuggestion(stop.id, it.lat, it.lng, it.label);
+          });
+        });
+      };
+
+      input.addEventListener("input", () => {
+        const q = input.value;
+        lastQuery = q;
+
+        if (tmr) clearTimeout(tmr);
+        tmr = setTimeout(async () => {
+          const current = input.value;
+          if (current !== lastQuery) return;
+
+          const items = await fetchSuggestions(current);
+          if (input.value !== current) return;
+
+          render(items);
+        }, 220);
+      });
+
+      input.addEventListener("focus", async () => {
+        const q = input.value;
+        if (q.trim().length >= 3) {
+          const items = await fetchSuggestions(q);
+          render(items);
+        }
+      });
+
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+          sug.classList.remove("open");
+          sug.innerHTML = "";
+        }
+        if (e.key === "Enter") {
+          e.preventDefault();
+          document.getElementById("routeBuildBtn").click();
+        }
+      });
+
+      document.addEventListener("click", (e) => {
+        const wrap = input.parentElement;
+        if (!wrap.contains(e.target)) {
+          sug.classList.remove("open");
+          sug.innerHTML = "";
+        }
+      });
+    }
+
+    // =========================
+    // ROUTE CLEAR
+    // =========================
+    function clearRoute() {
+      routeStart = null;
+      routeEnd = null;
+      routeRegionOrder = [];
+      routeStateGroups = [];
+      routeStateOpen.clear();
+      routeCountyOpen.clear();
+      focusedRegionKey = null;
+      focusedCanadaLayer = null;
+
+      // stops
+      for (const s of stops) {
+        if (s.marker) map.removeLayer(s.marker);
+      }
+      stops = [];
+      renderStopsUI();
+
+      if (routeStartMarker) { map.removeLayer(routeStartMarker); routeStartMarker = null; }
+      if (routeEndMarker) { map.removeLayer(routeEndMarker); routeEndMarker = null; }
+      if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
+      if (routeLineGlow) { map.removeLayer(routeLineGlow); routeLineGlow = null; }
+
+      const resultsEl = document.getElementById("routeResults");
+      resultsEl.style.display = "none";
+      resultsEl.innerHTML = "";
+
+      setRouteStatus("Type From/To (use suggestions), optionally add Stops, then Build. Locate sets From automatically.");
+    }
+
+    // =========================
+    // NOMINATIM AUTOCOMPLETE (FROM/TO)
     // =========================
     function pickSuggestion(which, lat, lng, label) {
       const ll = L.latLng(lat, lng);
@@ -2230,7 +2410,6 @@
           routeStart = routeStartMarker.getLatLng();
           const addr = await reverseGeocode(routeStart.lat, routeStart.lng);
           if (addr) document.getElementById("fromInput").value = addr;
-          if (routeStart && routeEnd) buildRoute();
         });
         document.getElementById("fromInput").value = label;
       } else {
@@ -2241,7 +2420,6 @@
           routeEnd = routeEndMarker.getLatLng();
           const addr = await reverseGeocode(routeEnd.lat, routeEnd.lng);
           if (addr) document.getElementById("toInput").value = addr;
-          if (routeStart && routeEnd) buildRoute();
         });
         document.getElementById("toInput").value = label;
       }
@@ -2384,8 +2562,28 @@
 
       const locateBtn = document.getElementById("locateBtn");
       const swapBtn = document.getElementById("swapBtn");
+      const addStopBtn = document.getElementById("addStopBtn");
       const buildBtn = document.getElementById("routeBuildBtn");
       const clearBtn = document.getElementById("routeClearBtn");
+
+      addStopBtn.addEventListener("click", () => {
+        const id = "stop_" + Math.random().toString(36).slice(2, 10);
+        stops.push({
+          id,
+          ll: null,
+          marker: null,
+          label: "",
+          inputId: `${id}_input`,
+          sugId: `${id}_sug`
+        });
+        renderStopsUI();
+        setSidebarOpen(true);
+        // focus the new stop input
+        setTimeout(() => {
+          const input = document.getElementById(`${id}_input`);
+          if (input) input.focus();
+        }, 0);
+      });
 
       locateBtn.addEventListener("click", () => {
         if (!navigator.geolocation) {
@@ -2411,7 +2609,6 @@
             routeStart = routeStartMarker.getLatLng();
             const addr = await reverseGeocode(routeStart.lat, routeStart.lng);
             if (addr) fromEl.value = addr;
-            if (routeStart && routeEnd) buildRoute();
           });
 
           try {
@@ -2421,13 +2618,12 @@
 
           map.setView(ll, Math.max(map.getZoom(), 12));
           setRouteStatus(`From set from your location. To: ${fmtLL(routeEnd)}.`);
-          if (routeStart && routeEnd) buildRoute();
         }, () => {
           setRouteStatus("Location failed. Allow location permission and try again.");
         }, { enableHighAccuracy: true, timeout: 12000 });
       });
 
-      swapBtn.addEventListener("click", () => {
+      swapBtn.addEventListener("click", async () => {
         const tmp = fromEl.value;
         fromEl.value = toEl.value;
         toEl.value = tmp;
@@ -2445,7 +2641,6 @@
             routeStart = routeStartMarker.getLatLng();
             const addr = await reverseGeocode(routeStart.lat, routeStart.lng);
             if (addr) fromEl.value = addr;
-            if (routeStart && routeEnd) buildRoute();
           });
         }
 
@@ -2455,12 +2650,10 @@
             routeEnd = routeEndMarker.getLatLng();
             const addr = await reverseGeocode(routeEnd.lat, routeEnd.lng);
             if (addr) toEl.value = addr;
-            if (routeStart && routeEnd) buildRoute();
           });
         }
 
-        if (routeStart && routeEnd) buildRoute();
-        else setRouteStatus(`Start: ${fmtLL(routeStart)} | End: ${fmtLL(routeEnd)}`);
+        setRouteStatus(`Start: ${fmtLL(routeStart)} | End: ${fmtLL(routeEnd)} (Stops unchanged)`);
       });
 
       async function geocodeOne(q) {
@@ -2479,7 +2672,7 @@
       }
 
       buildBtn.addEventListener("click", async () => {
-        setRouteStatus("Resolving From/To…");
+        setRouteStatus("Resolving From/To/Stops…");
 
         if (!routeStart) {
           const hit = await geocodeOne(fromEl.value);
@@ -2493,9 +2686,50 @@
           pickSuggestion("to", hit.lat, hit.lng, hit.label);
         }
 
-        if (routeStart && routeEnd) {
-          await buildRoute();
+        // geocode any stop inputs that are filled but not set
+        for (const s of stops) {
+          if (s.ll) continue;
+          const input = document.getElementById(s.inputId);
+          const txt = input ? input.value.trim() : "";
+          if (!txt) continue;
+
+          const hit = await geocodeOne(txt);
+          if (hit) pickStopSuggestion(s.id, hit.lat, hit.lng, hit.label);
+        }
+
+        if (!routeStart || !routeEnd) {
+          setRouteStatus("Missing From or To.");
+          return;
+        }
+
+        // ensure all stops either set or blank
+        const missingStops = stops
+          .map((s, i) => ({ s, i }))
+          .filter(x => {
+            const input = document.getElementById(x.s.inputId);
+            const hasText = input && input.value.trim().length > 0;
+            return hasText && !x.s.ll;
+          });
+
+        if (missingStops.length) {
+          setRouteStatus(`One or more stops couldn't be resolved. Fix Stop ${missingStops[0].i + 1} (pick a suggestion).`);
+          return;
+        }
+
+        try {
+          setRouteStatus("Building route with Valhalla (chunked)… this can take a bit on long trips.");
+          const r = await buildRouteWithStops();
+
+          drawRoutePolyline(r.latlngs);
+          analyzeRouteCoords(r.coordsLngLat);
+
+          const dist = (r.miles != null) ? `${r.miles.toFixed(1)} mi` : "Distance N/A";
+          const eta = (r.seconds != null) ? `ETA ${fmtDuration(r.seconds)}` : "ETA N/A";
+          setRouteStatus(`Fastest route | ${dist} | ${eta} | Regions crossed: ${routeRegionOrder.length}`);
+
           setSidebarOpen(true);
+        } catch (e) {
+          setRouteStatus(`Route failed: ${String(e?.message || e || "unknown error")}`);
         }
       });
 
@@ -2550,7 +2784,7 @@
         initRouteUI();
 
         setSidebarOpen(false);
-        setStatus("Ready. Use From/To suggestions, then Build.");
+        setStatus("Ready. Use From/To suggestions, optionally add Stops, then Build.");
 
       } catch (err) {
         console.error(err);
