@@ -667,26 +667,6 @@
     window.addEventListener("resize", () => setSidebarOpen(false));
 
     function setStatus(msg) { document.getElementById("status").textContent = msg; }
-
-    // =========================
-    // GOATCOUNTER EVENT HELPERS
-    // =========================
-    // GoatCounter "events" are just counts with {event:true}.
-    // NOTE: event "path" cannot start with '/'.
-    function gcEvent(name, title) {
-      try {
-        if (!name) return;
-        const p = String(name).replace(/^\/+/, "").replace(/\s+/g, "-");
-        const gc = window.goatcounter;
-        if (gc && typeof gc.count === "function") {
-          gc.count({
-            path: p,
-            title: title || p,
-            event: true
-          });
-        }
-      } catch (_) {}
-    }
     function setRouteStatus(msg) { document.getElementById("routeStatus").textContent = msg; }
 
     function hasValid(v) {
@@ -2234,7 +2214,6 @@
         const dist = (r.miles != null) ? `${r.miles.toFixed(1)} mi` : "Distance N/A";
         const eta = (r.seconds != null) ? `ETA ${fmtDuration(r.seconds)}` : "ETA N/A";
         setRouteStatus(`Valhalla route | ${dist} | ${eta} | Regions crossed: ${routeRegionOrder.length} | Segments: ${r.segments}`);
-        gcEvent("route-built-valhalla", "Route Built (Valhalla)");
         return;
       }
 
@@ -2247,14 +2226,12 @@
       const r2 = await buildRouteOsrmFallbackMulti(points);
       if (!r2.ok) {
         setRouteStatus("Route fetch failed. Try again.");
-        gcEvent("route-build-failed", "Route Build Failed");
         return;
       }
 
       const dist2 = (r2.miles != null) ? `${r2.miles.toFixed(1)} mi` : "Distance N/A";
       const eta2 = (r2.seconds != null) ? `ETA ${fmtDuration(r2.seconds)}` : "ETA N/A";
       setRouteStatus(`OSRM route | ${dist2} | ${eta2} | Regions crossed: ${routeRegionOrder.length}`);
-      gcEvent("route-built-osrm", "Route Built (OSRM)");
     }
 
     function clearRoute() {
@@ -2783,7 +2760,6 @@
       });
 
       buildBtn.addEventListener("click", async () => {
-        gcEvent("route-build-click", "Route Build Click");
         setRouteStatus("Resolving From/To/Stops…");
 
         // Resolve From
