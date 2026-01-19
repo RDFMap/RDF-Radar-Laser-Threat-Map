@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>RDF Route Planner</title>
+    <title>RDF Route Planne</title>
 
     <link rel="icon" href="./favicon.ico">
     <link rel="icon" type="image/svg+xml" href="./favicon.svg">
@@ -64,47 +64,47 @@
         }
 
         #sidebar h1 { font-size: 20px; margin: 0 0 6px; }
-        #status { font-size: 13px; color: #666; margin-top: 2px; overflow-wrap: anywhere; }
+        #status { font-size: 13px; color: #666; margin-top: 2px; white-space: normal; overflow-wrap: break-word; }
         h2 { font-size: 15px; margin: 0 0 10px; }
 
         /* Header row */
         .header-row{
-          display:grid;
-          grid-template-columns: minmax(0,1fr) 180px;
+          display:flex;
+          align-items:flex-start;
+          justify-content:space-between;
           gap: 12px;
-          align-items:start;
         }
         .header-left{ min-width: 0; }
         .header-links{
-          width: 180px;
-          max-width: 180px;
-          display:flex;
-          flex-direction:column;
-          align-items:flex-end;
-          gap: 6px;
-          text-align:right;
-        }
-        .header-links a{
-          text-decoration: none;
-        }
-        .header-links .header-btn{
-          width: 100%;
-          max-width: 180px;
-          height: 34px;
-          padding: 0 10px;
-          font-size: 11px;
-          font-weight: 900;
-          justify-content: center;
-          text-align: center;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-
-          --btn-color: #d9d9d9;
-          --btn-tint: rgba(0,0,0,0.04);
-        }
-
-        /* Mobile drawer */
+  display:flex;
+  flex-direction:column;
+  align-items:flex-end;
+  gap: 8px;
+  text-align:right;
+  flex: 0 0 180px;
+}
+.header-links a.link-btn{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  width: 180px;
+  min-height: 34px;
+  padding: 6px 10px;
+  border-radius: 12px;
+  border: 1px solid #d6d6d6;
+  background: rgba(255,255,255,0.95);
+  box-shadow: 0 1px 0 rgba(0,0,0,0.04);
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.15;
+  text-decoration: none;
+  color:#111;
+  text-align:center;
+  white-space: normal;
+  word-break: break-word;
+}
+.header-links a.link-btn:hover{ background: rgba(0,0,0,0.06); }
+/* Mobile drawer */
         #sidebarToggle {
           position: fixed;
           top: 12px;
@@ -155,11 +155,10 @@
           #sidebar.open { transform: translateX(0); }
           body.no-scroll { overflow: hidden; }
 
-          .header-row{ grid-template-columns: 1fr; }
-
-          .header-links{ width: 100%; max-width: 100%; align-items:flex-start; text-align:left; }
-          .header-links .header-btn{ max-width: 100%; }
-        }
+          .header-row{ flex-direction:column; align-items:flex-start; }
+          .header-links{ align-items:flex-start; text-align:left; }
+          .header-links a.link-btn{ width: 100%; }
+}
 
         /* Inputs + autocomplete */
         .route-grid{ display:flex; gap:8px; align-items:center; }
@@ -318,13 +317,6 @@
           font-weight: 950;
           margin-bottom: 6px;
         }
-        .rollup-subtitle{
-          font-size: 12px;
-          font-weight: 950;
-          margin-top: 10px;
-          margin-bottom: 6px;
-        }
-
         .rollup-line{
           font-size: 12px;
           color:#111;
@@ -351,7 +343,9 @@
           background: #fff;
         }
 
-        .route-county-row{
+
+        .law-box{ width:100%; box-sizing:border-box; }
+.route-county-row{
           display:grid;
           grid-template-columns: minmax(0,1fr) auto;
           gap: 10px;
@@ -435,16 +429,6 @@
         .flagline { margin-top: 6px; }
         .flagline div { margin-top: 3px; }
 
-
-        /* Stop marker icon */
-        .stop-icon{
-          width: 18px;
-          height: 18px;
-          border-radius: 50%;
-          background: #e53935;
-          border: 2px solid #fff;
-          box-shadow: 0 8px 16px rgba(0,0,0,0.18);
-        }
         /* Player icon */
         .player-icon{
           width: 22px;
@@ -466,6 +450,14 @@
           top: 50%;
           transform: translate(-50%,-50%);
         }
+    .stop-marker-dot{
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #e11;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.45), 0 8px 16px rgba(0,0,0,0.15);
+}
     </style>
 </head>
 
@@ -485,13 +477,13 @@
                 </div>
 
                 <div class="header-links">
-                    <a class="btn header-btn" href="https://www.rdforum.org/threads/150468/" target="_blank" rel="noopener noreferrer">
+                    <a class="link-btn" href="https://www.rdforum.org/threads/150468/" target="_blank" rel="noopener noreferrer">
                         RDForum Thread & Updates
                     </a>
-                    <a class="btn header-btn" href="https://forms.fillout.com/t/dsffrfAc4jus" target="_blank" rel="noopener noreferrer">
+                    <a class="link-btn" href="https://forms.fillout.com/t/dsffrfAc4jus" target="_blank" rel="noopener noreferrer">
                         Have Data? Submit here
                     </a>
-                    <a class="btn header-btn" href="./index.html" target="_self" rel="noopener">
+                    <a class="link-btn" href="./index.html" target="_self" rel="noopener">
                         Threat Map
                     </a>
                 </div>
@@ -587,6 +579,9 @@
     // Optional fallback (only used if Valhalla completely fails)
     const OSRM_ROUTE_URL = "https://router.project-osrm.org/route/v1/driving/";
 
+    // Build logging (Google Apps Script Web App)
+    const BUILD_LOG_ENDPOINT = "https://script.google.com/macros/s/AKfycbx8r36RjopdRiZAVNn-IULfpY3Ckw6GwMZ4ytR9l_jBuvJ8ENkOmKKaw7pMOerm8iFw/exec";
+
     // Nominatim (OSM) autocomplete + geocode (restrict to US/CA)
     const NOMINATIM_COUNTRYCODES = "us,ca";
     const NOMINATIM_SEARCH =
@@ -668,6 +663,42 @@
 
     function setStatus(msg) { document.getElementById("status").textContent = msg; }
     function setRouteStatus(msg) { document.getElementById("routeStatus").textContent = msg; }
+
+    function getOrCreateClientId_() {
+      const k = 'rdf_client_id';
+      try {
+        let id = localStorage.getItem(k);
+        if (id && id.length >= 10) return id;
+        id = (crypto && crypto.randomUUID) ? crypto.randomUUID() : (Date.now().toString(36) + Math.random().toString(36).slice(2, 10));
+        localStorage.setItem(k, id);
+        return id;
+      } catch {
+        return (Date.now().toString(36) + Math.random().toString(36).slice(2, 10));
+      }
+    }
+
+    function postBuildLog_(payload) {
+      if (!BUILD_LOG_ENDPOINT) return;
+      try {
+        const body = JSON.stringify(payload);
+        if (navigator.sendBeacon) {
+          const blob = new Blob([body], { type: 'text/plain;charset=UTF-8' });
+          navigator.sendBeacon(BUILD_LOG_ENDPOINT, blob);
+          return;
+        }
+      } catch {}
+
+      try {
+        fetch(BUILD_LOG_ENDPOINT, {
+          method: 'POST',
+          mode: 'no-cors',
+          keepalive: true,
+          headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+          body: JSON.stringify(payload)
+        }).catch(() => {});
+      } catch {}
+    }
+
 
     function hasValid(v) {
       if (v === undefined || v === null) return false;
@@ -1036,38 +1067,36 @@
     // Stops
     let routeStops = []; // [{ id, ll: L.LatLng|null, label: string, inputEl, sugEl }]
 
-    // Stop markers (red)
-    const routeStopMarkers = new Map(); // stopId -> L.Marker
-    const STOP_ICON = L.divIcon({
-      className: "",
-      html: `<div class="stop-icon"></div>`,
-      iconSize: [18,18],
-      iconAnchor: [9,9]
-    });
+    // Stop markers (red dots on map)
+    const stopMarkers = new Map(); // stopId -> L.Marker
 
-    function upsertStopMarker(stop) {
-      if (!map || !stop || !stop.ll) return;
-      const m = routeStopMarkers.get(stop.id);
-      if (m) {
-        m.setLatLng(stop.ll);
-        return;
-      }
-      const nm = L.marker(stop.ll, { icon: STOP_ICON, interactive: false }).addTo(map);
-      routeStopMarkers.set(stop.id, nm);
+    function stopIcon_() {
+      return L.divIcon({ className: '', html: '<div class="stop-marker-dot"></div>', iconSize: [16,16], iconAnchor: [8,8] });
     }
 
-    function removeStopMarker(stopId) {
-      const m = routeStopMarkers.get(stopId);
+    function upsertStopMarker_(stop) {
+      if (!map || !stop || !stop.id) return;
+      if (!stop.ll) { removeStopMarker_(stop.id); return; }
+      const ll = stop.ll;
+      if (!Number.isFinite(ll.lat) || !Number.isFinite(ll.lng)) { removeStopMarker_(stop.id); return; }
+      const existing = stopMarkers.get(stop.id);
+      if (existing) { existing.setLatLng(ll); return; }
+      const m = L.marker(ll, { icon: stopIcon_(), interactive: false }).addTo(map);
+      stopMarkers.set(stop.id, m);
+    }
+
+    function removeStopMarker_(stopId) {
+      const m = stopMarkers.get(stopId);
       if (!m) return;
       try { map.removeLayer(m); } catch {}
-      routeStopMarkers.delete(stopId);
+      stopMarkers.delete(stopId);
     }
 
-    function clearStopMarkers() {
-      for (const [id, m] of routeStopMarkers.entries()) {
+    function clearStopMarkers_() {
+      for (const m of stopMarkers.values()) {
         try { map.removeLayer(m); } catch {}
       }
-      routeStopMarkers.clear();
+      stopMarkers.clear();
     }
 
     let youMarker = null;
@@ -1798,31 +1827,7 @@
       return (arr && arr.length) ? escapeHtml(arr.join(", ")) : `<span class="rollup-empty">None</span>`;
     }
 
-    function stateLawInnerHtml(abbr) {
-      const info = lawsByState.get(abbr);
-      if (!info) {
-        return `
-          <div style="margin-top:10px; border-top:1px solid #eee; padding-top:10px;">
-            <div class="rollup-subtitle">State law trigger (${escapeHtml(abbr)})</div>
-            <div class="rollup-line"><strong>Trigger:</strong> No entry yet.</div>
-            <div class="rollup-line"><strong>Plain English:</strong> —</div>
-          </div>
-        `;
-      }
-
-      const trigger = hasValid(info.trigger) ? info.trigger : "No single statewide numeric trigger";
-      const meaning = hasValid(info.meaning) ? info.meaning : "—";
-
-      return `
-        <div style="margin-top:10px; border-top:1px solid #eee; padding-top:10px;">
-          <div class="rollup-subtitle">State law trigger (${escapeHtml(abbr)})</div>
-          <div class="rollup-line"><strong>Trigger:</strong> ${escapeHtml(trigger)}</div>
-          <div class="rollup-line"><strong>Plain English:</strong> ${escapeHtml(meaning)}</div>
-        </div>
-      `;
-    }
-
-    function rollupHtml(roll, extraHtml) {
+    function rollupHtml(roll) {
       return `
         <div class="rollup">
           <div class="rollup-title">Threats encountered</div>
@@ -1832,7 +1837,6 @@
           <div class="rollup-line"><strong>LiDAR:</strong> ${listOrNone(roll.lidar)}</div>
           <div class="rollup-line"><strong>DE:</strong> ${listOrNone(roll.de)}</div>
           <div class="rollup-line"><strong>Speed Cameras:</strong> ${listOrNone(roll.cams)}</div>
-          ${extraHtml || ""}
         </div>
       `;
     }
@@ -2095,6 +2099,39 @@
       return { ok: false, reason: String(lastErr?.message || lastErr || "Valhalla failed") };
     }
 
+    function compactLawBoxForState(abbr) {
+      const info = lawsByState.get(abbr);
+      if (!info) {
+        return `
+          <div class="record law-box" style="margin-top:10px;">
+            <div style="font-weight:950;">State law trigger</div>
+            <div style="font-size:12.5px; color:#666; margin-top:4px;">
+              No entry yet for ${escapeHtml(abbr)}.
+            </div>
+          </div>
+        `;
+      }
+
+      const trigger = hasValid(info.trigger) ? info.trigger : "No single statewide numeric trigger";
+      const meaning = hasValid(info.meaning) ? info.meaning : "—";
+
+      return `
+        <div class="record law-box" style="margin-top:10px;">
+          <div style="display:flex; gap:10px; align-items:flex-start; justify-content:space-between;">
+            <div style="font-weight:950;">State law trigger</div>
+            <div class="pill" style="border-color:rgba(0,0,0,0.18); background:rgba(0,0,0,0.05);">
+              ${escapeHtml(abbr)}
+            </div>
+          </div>
+
+          <div style="margin-top:8px; font-size:12.5px; line-height:1.25;">
+            <div><strong>Trigger:</strong><br>${escapeHtml(trigger)}</div>
+            <div style="margin-top:8px;"><strong>Plain English:</strong><br>${escapeHtml(meaning)}</div>
+          </div>
+        </div>
+      `;
+    }
+
     async function buildRouteValhallaChunkedWithStops() {
       if (!routeStart || !routeEnd) return { ok: false, reason: "Missing endpoints" };
 
@@ -2206,7 +2243,7 @@
     }
 
     async function buildRoute() {
-      if (!routeStart || !routeEnd) return;
+      if (!routeStart || !routeEnd) return { ok: false, reason: 'Missing endpoints' };
 
       // Try Valhalla chunked + stop-aware first (do NOT instantly fall back)
       const r = await buildRouteValhallaChunkedWithStops();
@@ -2214,7 +2251,7 @@
         const dist = (r.miles != null) ? `${r.miles.toFixed(1)} mi` : "Distance N/A";
         const eta = (r.seconds != null) ? `ETA ${fmtDuration(r.seconds)}` : "ETA N/A";
         setRouteStatus(`Valhalla route | ${dist} | ${eta} | Regions crossed: ${routeRegionOrder.length} | Segments: ${r.segments}`);
-        return;
+        return { ok: true, provider: 'valhalla', miles: r.miles, seconds: r.seconds, segments: r.segments };
       }
 
       // If Valhalla fails, only then try OSRM
@@ -2226,19 +2263,21 @@
       const r2 = await buildRouteOsrmFallbackMulti(points);
       if (!r2.ok) {
         setRouteStatus("Route fetch failed. Try again.");
-        return;
+        return { ok: false, provider: 'osrm', reason: 'Route fetch failed' };
       }
 
       const dist2 = (r2.miles != null) ? `${r2.miles.toFixed(1)} mi` : "Distance N/A";
       const eta2 = (r2.seconds != null) ? `ETA ${fmtDuration(r2.seconds)}` : "ETA N/A";
       setRouteStatus(`OSRM route | ${dist2} | ${eta2} | Regions crossed: ${routeRegionOrder.length}`);
+      return { ok: true, provider: 'osrm', miles: r2.miles, seconds: r2.seconds, segments: null };
     }
 
     function clearRoute() {
       routeStart = null;
       routeEnd = null;
 
-      clearStopMarkers();
+      clearStopMarkers_();
+
       routeStops = [];
       const stopsEl = document.getElementById("stopsContainer");
       if (stopsEl) stopsEl.innerHTML = "";
@@ -2308,7 +2347,7 @@
           ? `${detailsCount}/${countyCount} regions with details on route`
           : `${stateRecordCount} state record${stateRecordCount===1?"":"s"} • ${detailsCount}/${countyCount} counties with details on route`;
 
-        const lawExtra = (!g.isCanada) ? stateLawInnerHtml(g.abbrev) : "";
+        const lawBox = (!g.isCanada) ? compactLawBoxForState(g.abbrev) : "";
 
         html += `
           <div class="route-state-card" data-state="${escapeAttr(g.id)}">
@@ -2323,7 +2362,9 @@
               </button>
             </div>
 
-            ${rollupHtml(roll, lawExtra)}
+            ${rollupHtml(roll)}
+
+            ${lawBox}
 
             <div class="route-state-body ${open ? "open" : ""}" data-body="${escapeAttr(g.id)}">
               ${(!g.isCanada && stateRows.length) ? `
@@ -2633,13 +2674,13 @@
         stop.ll = L.latLng(lat, lng);
         stop.label = label;
         input.value = label;
-        upsertStopMarker(stop);
+        upsertStopMarker_(stop);
         map.setView(stop.ll, Math.max(map.getZoom(), 12));
       });
 
       removeBtn.addEventListener("click", () => {
+        removeStopMarker_(id);
         routeStops = routeStops.filter(s => s.id !== id);
-        removeStopMarker(id);
         wrap.remove();
       });
     }
@@ -2734,7 +2775,6 @@
         const stopTexts = routeStops.map(s => s.inputEl.value);
         routeStops.forEach((s, i) => { s.inputEl.value = stopTexts[stopTexts.length - 1 - i] || ""; s.ll = null; s.label = ""; });
         routeStops.reverse();
-        clearStopMarkers();
 
         if (routeStartMarker) { map.removeLayer(routeStartMarker); routeStartMarker = null; }
         if (routeEndMarker) { map.removeLayer(routeEndMarker); routeEndMarker = null; }
@@ -2791,7 +2831,7 @@
           if (!hit) { setRouteStatus(`Could not find a stop: "${txt}". Pick a suggestion or remove it.`); return; }
           s.ll = L.latLng(hit.lat, hit.lng);
           s.inputEl.value = hit.label;
-          upsertStopMarker(s);
+          upsertStopMarker_(s);
           await sleep(120);
         }
 
@@ -2812,9 +2852,37 @@
             if (addr) toEl.value = addr;
           });
         }
-
-        await buildRoute();
+        const t0 = Date.now();
+        const result = await buildRoute();
         setSidebarOpen(true);
+
+        if (result && result.ok) {
+          const clientId = getOrCreateClientId_();
+          const stopsCount = routeStops.filter(s => s.ll).length;
+
+          // States/provinces on route (from render analysis)
+          const states = (routeStateGroups || []).map(g => g.isCanada ? ('CA:' + g.abbrev) : g.abbrev);
+
+          postBuildLog_({
+            event: 'route_build',
+            ts: new Date().toISOString(),
+            clientId,
+            provider: result.provider,
+            miles: (typeof result.miles === 'number' && isFinite(result.miles)) ? result.miles : '',
+            seconds: (typeof result.seconds === 'number' && isFinite(result.seconds)) ? result.seconds : '',
+            segments: result.segments || '',
+            buildMs: Date.now() - t0,
+            stopsCount,
+            states: states.join(','),
+            startLat: routeStart ? +routeStart.lat.toFixed(6) : '',
+            startLng: routeStart ? +routeStart.lng.toFixed(6) : '',
+            endLat: routeEnd ? +routeEnd.lat.toFixed(6) : '',
+            endLng: routeEnd ? +routeEnd.lng.toFixed(6) : '',
+            page: location.pathname || '',
+            ref: document.referrer || '',
+            ua: navigator.userAgent || ''
+          });
+        }
       });
 
       clearBtn.addEventListener("click", () => clearRoute());
