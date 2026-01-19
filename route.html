@@ -559,6 +559,8 @@
 
     const GEOJSON_URL = "./allCounties.json";
     const CANADA_GEOJSON_URL = "./Canada.json";
+    // Thick state outlines (overlay)
+    const STATE_BORDERS_GEOJSON_URL = "./StateBorders.json";
 
     const DEFAULT_CENTER = [39.5, -98.35];
     const DEFAULT_ZOOM = 4;
@@ -1046,6 +1048,7 @@
     // MAP + DATA STATE
     // =========================
     let map, vgLayer;
+    let stateBordersLayer = null;
     let usGeojsonCache;
     let canadaProvincesCache = null;
     let canadaLayer = null;
@@ -1569,6 +1572,35 @@
           });
         }
       }).addTo(map);
+    }
+
+    // =========================
+    // STATE BORDERS (thick outline overlay)
+    // =========================
+    async function addStateBordersLayer() {
+      try {
+        const res = await fetch(STATE_BORDERS_GEOJSON_URL);
+        if (!res.ok) throw new Error("StateBorders.json fetch failed: " + res.status);
+        const geo = await res.json();
+
+        map.createPane("stateBordersPane");
+        map.getPane("stateBordersPane").style.zIndex = 900; // above counties + canada
+
+        if (stateBordersLayer) map.removeLayer(stateBordersLayer);
+
+        stateBordersLayer = L.geoJSON(geo, {
+          pane: "stateBordersPane",
+          interactive: false,
+          style: {
+            color: "#000",
+            weight: 4,
+            opacity: 0.9,
+            fill: false
+          }
+        }).addTo(map);
+      } catch (e) {
+        console.warn("State borders layer skipped:", e);
+      }
     }
 
     // =========================
@@ -2262,7 +2294,10 @@
       if (r.ok) {
         const dist = (r.miles != null) ? `${r.miles.toFixed(1)} mi` : "Distance N/A";
         const eta = (r.seconds != null) ? `ETA ${fmtDuration(r.seconds)}` : "ETA N/A";
-        setRouteStatus(`Valhalla route | ${dist} | ${eta} | Regions crossed: ${routeRegionOrder.length} | Segments: ${r.segments}`);
+        const regions = routeRegionOrder.length;
+const withData = routeRegionOrder.reduce((acc, k) => acc + (regionHasDetails(k) ? 1 : 0), 0);
+setRouteStatus(`Valhalla | ${dist} | ${eta} | Regions: ${withData}/${regions} w/ data | Segs: ${r.segments}`);
+
         return { ok: true, provider: 'valhalla', miles: r.miles, seconds: r.seconds, segments: r.segments };
       }
 
@@ -2280,7 +2315,10 @@
 
       const dist2 = (r2.miles != null) ? `${r2.miles.toFixed(1)} mi` : "Distance N/A";
       const eta2 = (r2.seconds != null) ? `ETA ${fmtDuration(r2.seconds)}` : "ETA N/A";
-      setRouteStatus(`OSRM route | ${dist2} | ${eta2} | Regions crossed: ${routeRegionOrder.length}`);
+      const regions2 = routeRegionOrder.length;
+const withData2 = routeRegionOrder.reduce((acc, k) => acc + (regionHasDetails(k) ? 1 : 0), 0);
+setRouteStatus(`OSRM | ${dist2} | ${eta2} | Regions: ${withData2}/${regions2} w/ data`);
+
       return { ok: true, provider: 'osrm', miles: r2.miles, seconds: r2.seconds, segments: null };
     }
 
@@ -2330,11 +2368,14 @@
       const stateCount = routeStateGroups.length;
       const regionCount = routeRegionOrder.length;
 
+      const regionsWithData = routeRegionOrder.reduce((acc, key) => acc + (regionHasDetails(key) ? 1 : 0), 0);
+
       let html = `
-        <div style="font-size:12.5px; color:#333; margin-bottom:10px; line-height:1.25;">
-          <strong>Route summary:</strong> ${stateCount} state/province${stateCount === 1 ? "" : "s"}, ${regionCount} region${regionCount === 1 ? "" : "s"}.
-        </div>
-      `;
+  <div style="font-size:12px; color:#666; margin-bottom:10px; line-height:1.25;">
+    Tap a state/province to expand.
+  </div>
+`;
+
 
       for (const g of routeStateGroups) {
         const open = !!routeStateOpen.get(g.id);
@@ -2932,6 +2973,8 @@
 
         await buildCountyVectorLayer();
         if (canadaProvincesCache) await addCanadaLayer();
+        // Thick state outlines on top
+        await addStateBordersLayer();
 
         setTimeout(() => map.invalidateSize(), 0);
         window.addEventListener("resize", () => map.invalidateSize());
