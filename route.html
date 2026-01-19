@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>RDFRLTM Route Planner</title>
+    <title>RDF Route Planner</title>
 
     <link rel="icon" href="./favicon.ico">
     <link rel="icon" type="image/svg+xml" href="./favicon.svg">
@@ -677,8 +677,26 @@
       }
     }
 
+    // Build logging: prefer GET "pixel" pings (zero CORS issues), fallback to POST (sendBeacon/no-cors)
     function postBuildLog_(payload) {
       if (!BUILD_LOG_ENDPOINT) return;
+
+      // 1) GET ping (most reliable cross-origin)
+      try {
+        const p = new URLSearchParams();
+        for (const [k, v] of Object.entries(payload || {})) {
+          if (v === undefined || v === null) continue;
+          // keep it small; stringify arrays/objects
+          const val = (typeof v === 'object') ? JSON.stringify(v) : String(v);
+          p.set(k, val);
+        }
+        p.set('_t', String(Date.now())); // cache buster
+        const img = new Image();
+        img.referrerPolicy = 'no-referrer-when-downgrade';
+        img.src = BUILD_LOG_ENDPOINT + '?' + p.toString();
+      } catch {}
+
+      // 2) POST fallback (best-effort)
       try {
         const body = JSON.stringify(payload);
         if (navigator.sendBeacon) {
@@ -1827,7 +1845,7 @@
       return (arr && arr.length) ? escapeHtml(arr.join(", ")) : `<span class="rollup-empty">None</span>`;
     }
 
-    function rollupHtml(roll) {
+    function rollupHtml(roll, extraHtml) {
       return `
         <div class="rollup">
           <div class="rollup-title">Threats encountered</div>
@@ -1837,6 +1855,7 @@
           <div class="rollup-line"><strong>LiDAR:</strong> ${listOrNone(roll.lidar)}</div>
           <div class="rollup-line"><strong>DE:</strong> ${listOrNone(roll.de)}</div>
           <div class="rollup-line"><strong>Speed Cameras:</strong> ${listOrNone(roll.cams)}</div>
+          ${extraHtml || ""}
         </div>
       `;
     }
@@ -2101,37 +2120,30 @@
 
     function compactLawBoxForState(abbr) {
       const info = lawsByState.get(abbr);
-      if (!info) {
-        return `
-          <div class="record law-box" style="margin-top:10px;">
-            <div style="font-weight:950;">State law trigger</div>
-            <div style="font-size:12.5px; color:#666; margin-top:4px;">
-              No entry yet for ${escapeHtml(abbr)}.
-            </div>
-          </div>
-        `;
-      }
+      const trigger = (info && hasValid(info.trigger)) ? info.trigger : "No single statewide numeric trigger";
+      const meaning = (info && hasValid(info.meaning)) ? info.meaning : "—";
 
-      const trigger = hasValid(info.trigger) ? info.trigger : "No single statewide numeric trigger";
-      const meaning = hasValid(info.meaning) ? info.meaning : "—";
-
+      // Inline (edge-to-edge) block that lives inside the Threats rollup (no separate boxed card)
       return `
-        <div class="record law-box" style="margin-top:10px;">
+        <div style="margin-top:10px; border-top:1px solid #eee; padding-top:10px;">
           <div style="display:flex; gap:10px; align-items:flex-start; justify-content:space-between;">
-            <div style="font-weight:950;">State law trigger</div>
+            <div style="font-size:12px; font-weight:950;">State law trigger</div>
             <div class="pill" style="border-color:rgba(0,0,0,0.18); background:rgba(0,0,0,0.05);">
               ${escapeHtml(abbr)}
             </div>
           </div>
 
-          <div style="margin-top:8px; font-size:12.5px; line-height:1.25;">
-            <div><strong>Trigger:</strong><br>${escapeHtml(trigger)}</div>
-            <div style="margin-top:8px;"><strong>Plain English:</strong><br>${escapeHtml(meaning)}</div>
-          </div>
+          ${info ? `
+            <div style="margin-top:8px; font-size:12.5px; line-height:1.25;">
+              <div class="rollup-line" style="margin-top:0;"><strong>Trigger:</strong><br>${escapeHtml(trigger)}</div>
+              <div class="rollup-line" style="margin-top:8px;"><strong>Plain English:</strong><br>${escapeHtml(meaning)}</div>
+            </div>
+          ` : `
+            <div style="margin-top:8px; font-size:12.5px; color:#666; line-height:1.25;">No entry yet.</div>
+          `}
         </div>
       `;
     }
-
     async function buildRouteValhallaChunkedWithStops() {
       if (!routeStart || !routeEnd) return { ok: false, reason: "Missing endpoints" };
 
@@ -2347,7 +2359,7 @@
           ? `${detailsCount}/${countyCount} regions with details on route`
           : `${stateRecordCount} state record${stateRecordCount===1?"":"s"} • ${detailsCount}/${countyCount} counties with details on route`;
 
-        const lawBox = (!g.isCanada) ? compactLawBoxForState(g.abbrev) : "";
+        const lawExtra = (!g.isCanada) ? compactLawBoxForState(g.abbrev) : "";
 
         html += `
           <div class="route-state-card" data-state="${escapeAttr(g.id)}">
@@ -2362,9 +2374,7 @@
               </button>
             </div>
 
-            ${rollupHtml(roll)}
-
-            ${lawBox}
+            ${rollupHtml(roll, lawExtra)}
 
             <div class="route-state-body ${open ? "open" : ""}" data-body="${escapeAttr(g.id)}">
               ${(!g.isCanada && stateRows.length) ? `
@@ -2865,22 +2875,15 @@
 
           postBuildLog_({
             event: 'route_build',
-            ts: new Date().toISOString(),
             clientId,
             provider: result.provider,
             miles: (typeof result.miles === 'number' && isFinite(result.miles)) ? result.miles : '',
-            seconds: (typeof result.seconds === 'number' && isFinite(result.seconds)) ? result.seconds : '',
             segments: result.segments || '',
             buildMs: Date.now() - t0,
             stopsCount,
             states: states.join(','),
-            startLat: routeStart ? +routeStart.lat.toFixed(6) : '',
-            startLng: routeStart ? +routeStart.lng.toFixed(6) : '',
-            endLat: routeEnd ? +routeEnd.lat.toFixed(6) : '',
-            endLng: routeEnd ? +routeEnd.lng.toFixed(6) : '',
             page: location.pathname || '',
-            ref: document.referrer || '',
-            ua: navigator.userAgent || ''
+            ref: document.referrer || ''
           });
         }
       });
