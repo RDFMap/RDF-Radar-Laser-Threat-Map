@@ -245,7 +245,66 @@
           margin-top:10px;
         }
 
-        /* Stop rows */
+
+
+/* Router selector pills (next to Clear) */
+.btn.router-pill{
+  height: 34px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 950;
+}
+.btn.router-pill.active{
+  border-width: 2px;
+  background: rgba(0,0,0,0.10);
+}
+.btn.router-pill:disabled{
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.btn.router-pill.api-drop{
+  width: 34px;
+  padding: 0;
+  font-weight: 950;
+}
+.api-key-row{
+  display:none;
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid #eee;
+  border-radius: 12px;
+  background: #fff;
+}
+.api-key-row .row{
+  display:flex;
+  gap:8px;
+  align-items:center;
+  flex-wrap:wrap;
+}
+.api-key-row input{
+  flex: 1;
+  min-width: 180px;
+  height: 34px;
+  border-radius: 12px;
+  border: 1px solid #dcdcdc;
+  padding: 0 10px;
+  font-size: 13px;
+  outline: none;
+  background: #fff;
+}
+.api-hint{
+  font-size: 12px;
+  color: #555;
+  margin-top: 8px;
+  line-height: 1.25;
+}
+.tiny{
+  height: 28px !important;
+  padding: 0 10px !important;
+  font-size: 12px !important;
+  border-radius: 10px !important;
+}
+/* Stop rows */
         .stops-wrap { margin-top: 10px; }
         .stop-row {
           display:flex;
@@ -523,6 +582,32 @@
                 <div class="route-actions">
                     <button class="btn" id="routeBuildBtn" type="button">Build</button>
                     <button class="btn" id="routeClearBtn" type="button">Clear</button>
+
+                    <button class="btn router-pill" id="provValhalla" type="button" title="Valhalla routing" disabled>Valhalla</button>
+                    <button class="btn router-pill" id="provOsrm" type="button" title="OSRM routing" disabled>OSRM</button>
+
+                    <button class="btn router-pill" id="provApi" type="button" title="GraphHopper routing (requires key)" disabled>API</button>
+                    <button class="btn router-pill api-drop" id="provApiDrop" type="button" title="GraphHopper API key">▾</button>
+                </div>
+
+
+                <div id="apiKeyRow" class="api-key-row">
+                    <div class="row">
+                        <input id="ghKeyInput" type="password" autocomplete="off" spellcheck="false" placeholder="GraphHopper API key (paste here)">
+                        <button class="btn tiny" id="ghTestBtn" type="button" title="Validate key">Test</button>
+                        <button class="btn tiny" id="ghInfoBtn" type="button" title="How to get a GraphHopper key">i</button>
+                        <span id="ghKeyStatus" style="font-size:12px; font-weight:950; opacity:0.75;"></span>
+                    </div>
+
+                    <div id="ghInfoBox" class="api-hint" style="display:none;">
+                        <div style="font-weight:950; margin-bottom:6px;">GraphHopper key setup</div>
+                        <ol style="margin:0; padding-left:18px;">
+                            <li>Create an account on GraphHopper (their dashboard).</li>
+                            <li>Create or open a project, then copy your <strong>API key</strong>.</li>
+                            <li>Paste it here, hit <strong>Test</strong>, then the <strong>API</strong> button will unlock.</li>
+                        </ol>
+                        <div style="margin-top:8px; opacity:0.8;">This key stays in your browser (localStorage). It’s not sent anywhere except GraphHopper when you build a route.</div>
+                    </div>
                 </div>
 
                 <div id="routeStatus" style="margin-top:10px; font-size:12.5px; color:#444; line-height:1.25;">
@@ -581,7 +666,15 @@
     // Optional fallback (only used if Valhalla completely fails)
     const OSRM_ROUTE_URL = "https://router.project-osrm.org/route/v1/driving/";
 
-    // Build logging (Google Apps Script Web App)
+
+
+
+// External API routing (GraphHopper) - requires key
+const GRAPHHOPPER_ROUTE_URL = "https://graphhopper.com/api/1/route";
+const GRAPHHOPPER_KEY_STORAGE = "rdf_graphhopper_key";
+const ROUTER_PREF_STORAGE = "rdf_router_pref";
+
+// Build logging (Google Apps Script Web App)
     const BUILD_LOG_ENDPOINT = "https://script.google.com/macros/s/AKfycbx8r36RjopdRiZAVNn-IULfpY3Ckw6GwMZ4ytR9l_jBuvJ8ENkOmKKaw7pMOerm8iFw/exec";
 
     // Nominatim (OSM) autocomplete + geocode (restrict to US/CA)
@@ -665,6 +758,9 @@
 
     function setStatus(msg) { document.getElementById("status").textContent = msg; }
     function setRouteStatus(msg) { document.getElementById("routeStatus").textContent = msg; }
+
+
+    let setActiveRouterUI_ = () => {};
 
     function getOrCreateClientId_() {
       const k = 'rdf_client_id';
@@ -1085,7 +1181,19 @@
     let routeLine = null;
     let routeLineGlow = null;
 
-    // Stops
+
+
+
+// Routing provider selection
+let activeRouter = "valhalla"; // "valhalla" | "osrm" | "api"
+let graphhopperKeyValid = false;
+let graphhopperLastTestedKey = "";
+let hasBuiltRoute = false; // used to keep router pills "blank" until first successful build
+let apiPanelOpen = false; // GraphHopper key dropdown visibility
+// Provider route cache (built on Build click). Each entry: { ok, reason?, coordsLngLat?, miles?, seconds?, segments? }
+let routeCache = { valhalla: null, osrm: null, api: null };
+
+// Stops
     let routeStops = []; // [{ id, ll: L.LatLng|null, label: string, inputEl, sugEl }]
 
     // Stop markers (red dots on map)
@@ -2176,7 +2284,7 @@
         </div>
       `;
     }
-    async function buildRouteValhallaChunkedWithStops() {
+    async function buildRouteValhallaChunkedWithStops(opts = { render: true }) {
       if (!routeStart || !routeEnd) return { ok: false, reason: "Missing endpoints" };
 
       // Build ordered route points: start -> stops(with LL) -> end
@@ -2248,17 +2356,19 @@
 
       if (allLatLngs.length < 2 || allCoordsLngLat.length < 2) return { ok: false, reason: "No final route" };
 
-      drawRoutePolyline(allLatLngs);
-      analyzeRouteCoords(allCoordsLngLat);
+      if (opts && opts.render) {
+        drawRoutePolyline(allLatLngs);
+        analyzeRouteCoords(allCoordsLngLat);
+      }
 
-      return { ok: true, miles: totalMiles, seconds: totalSeconds, segments: segmentPairs.length };
+      return { ok: true, coordsLngLat: allCoordsLngLat, miles: totalMiles, seconds: totalSeconds, segments: segmentPairs.length };
     }
 
     // =========================
     // OSRM fallback (only if Valhalla completely fails)
     // Supports multiple waypoints: start;stops;end
     // =========================
-    async function buildRouteOsrmFallbackMulti(pointsLL) {
+    async function buildRouteOsrmFallbackMulti(pointsLL, opts = { render: true }) {
       try {
         const coords = pointsLL.map(p => `${p.lng},${p.lat}`).join(";");
         const url = `${OSRM_ROUTE_URL}${coords}?overview=full&geometries=geojson&alternatives=false&steps=false`;
@@ -2269,14 +2379,17 @@
         if (!geom || geom.length < 2) return { ok: false, reason: "No route found" };
 
         const latlngs = geom.map(c => [c[1], c[0]]);
-        drawRoutePolyline(latlngs);
-        analyzeRouteCoords(geom);
+        if (opts && opts.render) {
+          drawRoutePolyline(latlngs);
+          analyzeRouteCoords(geom);
+        }
 
         const meters = Number(data?.routes?.[0]?.distance);
         const seconds = Number(data?.routes?.[0]?.duration);
 
         return {
           ok: true,
+          coordsLngLat: geom,
           miles: Number.isFinite(meters) ? metersToMiles(meters) : null,
           seconds: Number.isFinite(seconds) ? seconds : null
         };
@@ -2286,43 +2399,211 @@
       }
     }
 
-    async function buildRoute() {
-      if (!routeStart || !routeEnd) return { ok: false, reason: 'Missing endpoints' };
 
-      // Try Valhalla chunked + stop-aware first (do NOT instantly fall back)
-      const r = await buildRouteValhallaChunkedWithStops();
-      if (r.ok) {
-        const dist = (r.miles != null) ? `${r.miles.toFixed(1)} mi` : "Distance N/A";
-        const eta = (r.seconds != null) ? `ETA ${fmtDuration(r.seconds)}` : "ETA N/A";
-        const regions = routeRegionOrder.length;
-const withData = routeRegionOrder.reduce((acc, k) => acc + (regionHasDetails(k) ? 1 : 0), 0);
-setRouteStatus(`Valhalla | ${dist} | ${eta} | Regions: ${withData}/${regions} w/ data | Segs: ${r.segments}`);
+// =========================
+// GraphHopper routing (requires API key)
+// Supports multiple waypoints: point=... repeated
+// =========================
+function getGraphHopperKey_() {
+  try { return (localStorage.getItem(GRAPHHOPPER_KEY_STORAGE) || "").trim(); } catch { return ""; }
+}
 
-        return { ok: true, provider: 'valhalla', miles: r.miles, seconds: r.seconds, segments: r.segments };
-      }
+async function validateGraphHopperKey_(key) {
+  const k = (key || "").trim();
+  if (!k) return { ok: false, reason: "Missing key" };
 
-      // If Valhalla fails, only then try OSRM
-      setRouteStatus(`Valhalla failed (${r.reason}). Trying OSRM fallback…`);
+  // Cheap test request (no geometry) to validate the key.
+  // NYC-ish points so it always routes fast.
+  const params = new URLSearchParams();
+  params.append("point", "40.7128,-74.0060");
+  params.append("point", "40.7306,-73.9352");
+  params.set("profile", "car");
+  params.set("locale", "en");
+  params.set("instructions", "false");
+  params.set("calc_points", "false");
+  params.set("key", k);
 
-      const stopPts = routeStops.map(s => s.ll).filter(Boolean);
-      const points = [routeStart, ...stopPts, routeEnd];
+  const url = `${GRAPHHOPPER_ROUTE_URL}?${params.toString()}`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`;
+    try { const j = await res.json(); msg = j?.message || j?.error || msg; } catch {}
+    return { ok: false, reason: msg };
+  }
+  const data = await res.json();
+  const paths = data?.paths;
+  if (!Array.isArray(paths) || !paths.length) return { ok: false, reason: "No paths" };
+  return { ok: true };
+}
 
-      const r2 = await buildRouteOsrmFallbackMulti(points);
-      if (!r2.ok) {
-        setRouteStatus("Route fetch failed. Try again.");
-        return { ok: false, provider: 'osrm', reason: 'Route fetch failed' };
-      }
+async function buildRouteGraphHopperMulti(pointsLL, key, opts = { render: true }) {
+  const k = (key || "").trim();
+  if (!k) return { ok: false, reason: "Missing GraphHopper key" };
 
-      const dist2 = (r2.miles != null) ? `${r2.miles.toFixed(1)} mi` : "Distance N/A";
-      const eta2 = (r2.seconds != null) ? `ETA ${fmtDuration(r2.seconds)}` : "ETA N/A";
-      const regions2 = routeRegionOrder.length;
-const withData2 = routeRegionOrder.reduce((acc, k) => acc + (regionHasDetails(k) ? 1 : 0), 0);
-setRouteStatus(`OSRM | ${dist2} | ${eta2} | Regions: ${withData2}/${regions2} w/ data`);
+  const params = new URLSearchParams();
+  for (const p of pointsLL) params.append("point", `${p.lat},${p.lng}`);
+  params.set("profile", "car");
+  params.set("locale", "en");
+  params.set("instructions", "false");
+  params.set("points_encoded", "false");
+  params.set("calc_points", "true");
+  params.set("key", k);
 
-      return { ok: true, provider: 'osrm', miles: r2.miles, seconds: r2.seconds, segments: null };
+  const url = `${GRAPHHOPPER_ROUTE_URL}?${params.toString()}`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`;
+    try { const j = await res.json(); msg = j?.message || j?.error || msg; } catch {}
+    return { ok: false, reason: `GraphHopper failed: ${msg}` };
+  }
+
+  const data = await res.json();
+  const path = data?.paths?.[0];
+  const coords = path?.points?.coordinates;
+  if (!coords || coords.length < 2) return { ok: false, reason: "GraphHopper returned no geometry" };
+
+  const latlngs = coords.map(c => [c[1], c[0]]);
+  if (opts && opts.render) {
+    drawRoutePolyline(latlngs);
+    analyzeRouteCoords(coords);
+  }
+
+  const meters = Number(path?.distance);
+  const seconds = Number(path?.time) / 1000;
+  return {
+    ok: true,
+    coordsLngLat: coords,
+    miles: Number.isFinite(meters) ? metersToMiles(meters) : null,
+    seconds: Number.isFinite(seconds) ? seconds : null
+  };
+}
+
+
+
+async function buildAllRoutes_() {
+  if (!routeStart || !routeEnd) return { ok: false, reason: 'Missing endpoints' };
+
+  const stopPts = routeStops.map(s => s.ll).filter(Boolean);
+  const points = [routeStart, ...stopPts, routeEnd];
+
+  // While building, keep provider pills blank/disabled
+  hasBuiltRoute = false;
+  try { setActiveRouterUI_(activeRouter); } catch {}
+  try { syncProviderButtons_(); } catch {}
+
+  routeCache.valhalla = null;
+  routeCache.osrm = null;
+  routeCache.api = null;
+
+  // Build Valhalla
+  setRouteStatus("Building routes… (Valhalla)");
+  const v = await buildRouteValhallaChunkedWithStops({ render: false });
+  routeCache.valhalla = v;
+
+  // Build OSRM (single request, multi-point)
+  setRouteStatus("Building routes… (OSRM)");
+  const o = await buildRouteOsrmFallbackMulti(points, { render: false });
+  routeCache.osrm = o;
+
+  // Build API (GraphHopper) only if key validated
+  if (graphhopperKeyValid) {
+    // Build API route cache (does not change the displayed route)
+    const key = (() => {
+      try { return (localStorage.getItem(GRAPHHOPPER_KEY_STORAGE) || "").trim(); } catch { return ""; }
+    })();
+    if (key) {
+      const a = await buildRouteGraphHopperMulti(points, key, { render: false });
+      routeCache.api = a;
+    } else {
+      routeCache.api = { ok: false, reason: "Missing GraphHopper key" };
     }
+  } else {
+    routeCache.api = { ok: false, reason: "GraphHopper key not validated" };
+  }
 
-    function clearRoute() {
+  // After building, default to Valhalla (if it succeeded), otherwise fall back
+  hasBuiltRoute = true;
+
+  let pick = "valhalla";
+  if (!(routeCache.valhalla && routeCache.valhalla.ok)) {
+    if (routeCache.osrm && routeCache.osrm.ok) pick = "osrm";
+    else if (graphhopperKeyValid && routeCache.api && routeCache.api.ok) pick = "api";
+  }
+
+  // Auto-select Valhalla (or fallback) and render it
+  const ok = renderProviderFromCache_(pick, { setActive: true });
+  if (!ok) return { ok: false, reason: "No routes built" };
+  return { ok: true, provider: pick, miles: routeCache[pick].miles, seconds: routeCache[pick].seconds, segments: routeCache[pick].segments || null };
+}
+
+// Enable/disable router pills based on build state + cache + key validity
+function syncProviderButtons_() {
+  const provVal = document.getElementById("provValhalla");
+  const provOsrm = document.getElementById("provOsrm");
+  const provApi = document.getElementById("provApi");
+
+  const canPick = !!hasBuiltRoute;
+
+  if (provVal) provVal.disabled = !canPick || !(routeCache.valhalla && routeCache.valhalla.ok);
+  if (provOsrm) provOsrm.disabled = !canPick || !(routeCache.osrm && routeCache.osrm.ok);
+  if (provApi) provApi.disabled = !canPick || !graphhopperKeyValid || !(routeCache.api && routeCache.api.ok);
+}
+
+function providerLabel_(p) {
+  if (p === "valhalla") return "Valhalla";
+  if (p === "osrm") return "OSRM";
+  if (p === "api") return "GraphHopper";
+  return "Route";
+}
+
+function setRouteStatusForProvider_(provider, entry) {
+  const dist = (entry && entry.miles != null) ? `${entry.miles.toFixed(1)} mi` : "Distance N/A";
+  const eta = (entry && entry.seconds != null) ? `ETA ${fmtDuration(entry.seconds)}` : "ETA N/A";
+  const regions = routeRegionOrder.length;
+  const withData = routeRegionOrder.reduce((acc, k) => acc + (regionHasDetails(k) ? 1 : 0), 0);
+  const segs = (provider === "valhalla" && entry && entry.segments != null) ? ` | Segs: ${entry.segments}` : "";
+  setRouteStatus(`${providerLabel_(provider)} | ${dist} | ${eta} | Regions: ${withData}/${regions} w/ data${segs}`);
+}
+
+// Draw + analyze route from cache, and optionally set it as active
+function renderProviderFromCache_(provider, opts = { setActive: true }) {
+  const entry = routeCache[provider];
+  if (!entry || !entry.ok || !entry.coordsLngLat || entry.coordsLngLat.length < 2) return false;
+
+  const latlngs = entry.coordsLngLat.map(c => [c[1], c[0]]);
+  drawRoutePolyline(latlngs);
+  analyzeRouteCoords(entry.coordsLngLat);
+  setRouteStatusForProvider_(provider, entry);
+
+  if (opts && opts.setActive) {
+    activeRouter = provider;
+    try { localStorage.setItem(ROUTER_PREF_STORAGE, activeRouter); } catch {}
+    try { setActiveRouterUI_(activeRouter); } catch {}
+  }
+  syncProviderButtons_();
+  return true;
+}
+
+// If user validates an API key after a route is already built, build API route once to unlock.
+async function buildApiRouteIfPossible_() {
+  if (!hasBuiltRoute) { syncProviderButtons_(); return; }
+  if (!graphhopperKeyValid) { syncProviderButtons_(); return; }
+  if (!routeStart || !routeEnd) { syncProviderButtons_(); return; }
+
+  const stopPts = routeStops.map(s => s.ll).filter(Boolean);
+  const points = [routeStart, ...stopPts, routeEnd];
+
+  const key = (() => {
+    try { return (localStorage.getItem(GRAPHHOPPER_KEY_STORAGE) || "").trim(); } catch { return ""; }
+  })();
+  if (!key) { syncProviderButtons_(); return; }
+
+  setRouteStatus("Building routes… (API)");
+  const a = await buildRouteGraphHopperMulti(points, key, { render: false });
+  routeCache.api = a;
+  syncProviderButtons_();
+}
+function clearRoute() {
       routeStart = null;
       routeEnd = null;
 
@@ -2350,6 +2631,11 @@ setRouteStatus(`OSRM | ${dist2} | ${eta2} | Regions: ${withData2}/${regions2} w/
 
       document.getElementById("fromInput").value = "";
       document.getElementById("toInput").value = "";
+
+      hasBuiltRoute = false;
+      routeCache = { valhalla: null, osrm: null, api: null };
+      try { setActiveRouterUI_(activeRouter); } catch {}
+      try { syncProviderButtons_(); } catch {}
 
       setRouteStatus("Type From/To (use suggestions), optionally add stops, then Build. Locate sets From automatically.");
     }
@@ -2743,7 +3029,140 @@ setRouteStatus(`OSRM | ${dist2} | ${eta2} | Regions: ${withData2}/${regions2} w/
       const fromEl = document.getElementById("fromInput");
       const toEl = document.getElementById("toInput");
 
-      attachAutocompleteStatic("fromInput", "fromSug", (lat, lng, label) => {
+
+
+
+// Provider pills (next to Clear)
+const provVal = document.getElementById("provValhalla");
+const provOsrm = document.getElementById("provOsrm");
+const provApi = document.getElementById("provApi");
+const provApiDrop = document.getElementById("provApiDrop");
+
+const apiKeyRow = document.getElementById("apiKeyRow");
+const ghKeyInput = document.getElementById("ghKeyInput");
+const ghTestBtn = document.getElementById("ghTestBtn");
+const ghInfoBtn = document.getElementById("ghInfoBtn");
+const ghInfoBox = document.getElementById("ghInfoBox");
+const ghKeyStatus = document.getElementById("ghKeyStatus");
+
+// Highlight router pills only AFTER the first successful route build.
+// Before that they stay "blank" (no active state), but you can still pick a preferred router.
+setActiveRouterUI_ = function(router) {
+  const showActive = !!hasBuiltRoute;
+  if (provVal) provVal.classList.toggle("active", showActive && router === "valhalla");
+  if (provOsrm) provOsrm.classList.toggle("active", showActive && router === "osrm");
+  if (provApi) provApi.classList.toggle("active", showActive && router === "api");
+
+  // API key dropdown is controlled only by the caret button / invalid-key clicks
+  if (apiKeyRow) apiKeyRow.style.display = apiPanelOpen ? "block" : "none";
+};
+
+function triggerRebuildIfBuilt_() {
+  if (!hasBuiltRoute) return;
+  const b = document.getElementById("routeBuildBtn");
+  if (b) b.click();
+}
+
+// Restore last router preference
+try {
+  const saved = (localStorage.getItem(ROUTER_PREF_STORAGE) || "").trim();
+  if (saved === "valhalla" || saved === "osrm" || saved === "api") activeRouter = saved;
+} catch {}
+
+// Load stored key (no auto-test to avoid burning free-tier quota)
+if (ghKeyInput) {
+  try { ghKeyInput.value = (localStorage.getItem(GRAPHHOPPER_KEY_STORAGE) || "").trim(); } catch {}
+}
+
+function updateApiUi_(statusText, ok) {
+  if (ghKeyStatus) ghKeyStatus.textContent = statusText || "";
+  graphhopperKeyValid = !!ok;
+  try { syncProviderButtons_(); } catch {}
+
+  // If API becomes invalid while selected, kick back to Valhalla
+  if (!graphhopperKeyValid && activeRouter === "api") {
+    activeRouter = "valhalla";
+    try { localStorage.setItem(ROUTER_PREF_STORAGE, activeRouter); } catch {}
+    if (hasBuiltRoute) { try { renderProviderFromCache_("valhalla", { setActive: true }); } catch {} }
+  }
+  setActiveRouterUI_(activeRouter);
+  try { syncProviderButtons_(); } catch {}
+}
+
+async function testKeyAndUnlock_() {
+  const key = (ghKeyInput ? ghKeyInput.value : "").trim();
+  if (!key) { updateApiUi_("Paste key first.", false); return; }
+
+  // Keep dropdown open during/after test
+  apiPanelOpen = true;
+  setActiveRouterUI_(activeRouter);
+
+  // avoid re-testing same key
+  if (key === graphhopperLastTestedKey && graphhopperKeyValid) {
+    updateApiUi_("Key OK.", true);
+    return;
+  }
+
+  updateApiUi_("Testing…", false);
+  try { localStorage.setItem(GRAPHHOPPER_KEY_STORAGE, key); } catch {}
+
+  try {
+    const r = await validateGraphHopperKey_(key);
+    if (r.ok) {
+      graphhopperLastTestedKey = key;
+      updateApiUi_("Key OK.", true);
+      if (hasBuiltRoute) {
+        try {
+          await buildApiRouteIfPossible_();
+          // Keep confirmation visible
+          updateApiUi_("Key OK.", true);
+        } catch {}
+      }
+    } else {
+      graphhopperLastTestedKey = "";
+      updateApiUi_(("Key failed: " + (r.reason || "unknown")), false);
+    }
+  } catch (e) {
+    graphhopperLastTestedKey = "";
+    updateApiUi_("Key test failed.", false);
+  }
+}
+
+// Initial state: API locked until user clicks Test successfully
+updateApiUi_("", false);
+try { syncProviderButtons_(); } catch {}
+
+function toggleApiPanel_() {
+  apiPanelOpen = !apiPanelOpen;
+  setActiveRouterUI_(activeRouter);
+  if (apiPanelOpen && ghKeyInput) ghKeyInput.focus();
+}
+
+if (ghTestBtn) ghTestBtn.addEventListener("click", () => testKeyAndUnlock_());
+if (ghInfoBtn && ghInfoBox) ghInfoBtn.addEventListener("click", () => {
+  ghInfoBox.style.display = (ghInfoBox.style.display === "none") ? "block" : "none";
+});
+if (provApiDrop) provApiDrop.addEventListener("click", () => toggleApiPanel_());
+
+if (provVal) provVal.addEventListener("click", () => {
+  if (provVal.disabled) return;
+  renderProviderFromCache_("valhalla", { setActive: true });
+});
+
+if (provOsrm) provOsrm.addEventListener("click", () => {
+  if (provOsrm.disabled) return;
+  renderProviderFromCache_("osrm", { setActive: true });
+});
+
+if (provApi) provApi.addEventListener("click", () => {
+  if (provApi.disabled) { apiPanelOpen = true; try { setActiveRouterUI_(activeRouter); } catch {} return; }
+  renderProviderFromCache_("api", { setActive: true });
+});
+
+// reflect UI now (blank until first build)
+setActiveRouterUI_(activeRouter);
+
+attachAutocompleteStatic("fromInput", "fromSug", (lat, lng, label) => {
         const ll = L.latLng(lat, lng);
         routeStart = ll;
         if (routeStartMarker) map.removeLayer(routeStartMarker);
@@ -2904,10 +3323,12 @@ setRouteStatus(`OSRM | ${dist2} | ${eta2} | Regions: ${withData2}/${regions2} w/
           });
         }
         const t0 = Date.now();
-        const result = await buildRoute();
+        const result = await buildAllRoutes_();
         setSidebarOpen(true);
 
         if (result && result.ok) {
+          hasBuiltRoute = true;
+          try { setActiveRouterUI_(activeRouter); } catch {}
           const clientId = getOrCreateClientId_();
           const stopsCount = routeStops.filter(s => s.ll).length;
 
